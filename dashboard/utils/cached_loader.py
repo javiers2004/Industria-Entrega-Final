@@ -15,20 +15,25 @@ from src.scripts.data_loader import (
     get_data_path,
     get_project_root
 )
+# Importamos el loader dummy (simulado). Esta importación asume que
+# dashboard/tabs/tab_chemical.py ya contiene la función load_chemical_results
+# que simula los datos.
+from dashboard.tabs.tab_chemical import load_chemical_results as dummy_loader
 
 
 @st.cache_data(ttl=3600)  # Cache con TTL de 1 hora
 def load_and_clean_data() -> Optional[pd.DataFrame]:
     """
-    Carga y limpia el dataset de acero (version original) con cache de Streamlit.
+    Carga y limpia el dataset de acero con cache de Streamlit (datos originales).
 
     Returns:
         DataFrame limpio o None si hay error
     """
     try:
+        # Llama a la funcion original de carga y limpieza de datos
         return _load_data()
     except FileNotFoundError as e:
-        st.error(f"Error: No se encontró el archivo de datos principal. Asegúrese de que exista. Detalle: {e}")
+        st.error(str(e))
         return None
     except Exception as e:
         st.error(f"Error inesperado cargando datos: {e}")
@@ -38,7 +43,7 @@ def load_and_clean_data() -> Optional[pd.DataFrame]:
 @st.cache_data(ttl=3600)
 def load_data_for_eda(file_name: str) -> Optional[pd.DataFrame]:
     """
-    Carga el dataset final especificado (ej. dataset_final_temp.csv).
+    Carga el dataset final especificado (ej. dataset_final_temp.csv) para el EDA.
 
     Parameters:
     -----------
@@ -53,7 +58,6 @@ def load_data_for_eda(file_name: str) -> Optional[pd.DataFrame]:
         return None
 
     try:
-        # Asumiendo que estos archivos finales ya estan limpios y usan '.' como separador decimal
         df = pd.read_csv(data_path)
         return df
     except Exception as e:
@@ -66,49 +70,42 @@ def load_chemical_results() -> Dict[str, Dict[str, Any]]:
     """
     Carga los resultados pre-calculados (metrics, y_test, y_pred, importance_df)
     para todos los targets quimicos.
-
-    NOTA: El usuario debe implementar la lógica de lectura de archivos
-    (ej. JSON para métricas, CSV para predicciones/importancia)
-    que fueron guardados por el script train_chemical.py.
-
-    Returns:
-        Dict[str, Dict[str, Any]]:
-            {target: {'y_test': Series, 'y_pred': Series, 'importance_df': DataFrame, 'metrics': Dict}}
     """
     results = {}
 
-    # Directorio donde se asume que train_chemical.py guarda los resultados
-    # Ajuste esta ruta si su script de entrenamiento guarda en otro lugar.
+    # Directorio donde train_chemical.py guardó los resultados
     model_results_dir: Path = get_project_root() / "models" / "chemical_results"
 
+    # --- LÍNEAS DE DEBUG CRÍTICAS ---
+    # Esto mostrará la ruta exacta que Streamlit está buscando.
+    st.info(f"DEBUG: Intentando cargar resultados desde: {model_results_dir.resolve()}")
+
     if not model_results_dir.exists():
-        st.warning(f"ADVERTENCIA: Directorio de resultados del modelo químico no encontrado: {model_results_dir}")
+        st.error("DEBUG: Directorio NO ENCONTRADO. Recurriendo a datos simulados.")
+        st.warning(f"ADVERTENCIA: Directorio de resultados del modelo químico no encontrado.")
         st.warning("Usando datos simulados para la visualización.")
-
-        # --- [FALLBACK SIMULADO] ---
-        # Simplemente devuelvo datos simulados si no se encuentra el directorio de resultados
-        from dashboard.tabs.tab_chemical import load_chemical_results as dummy_loader
         return dummy_loader()
-        # --------------------------
 
+    st.success("DEBUG: El directorio de resultados FUE ENCONTRADO. Intentando cargar archivos reales.")
     st.info("Cargando resultados de modelos químicos desde archivos...")
 
+    # Se ejecuta este bloque SOLO si existe el directorio de resultados.
     for target in CHEMICAL_TARGETS:
         try:
-            # 1. Cargar Metricas (Asumiendo que se guardaron en un JSON)
+            # 1. Cargar Metricas (JSON)
             metrics_path = model_results_dir / f'{target}_metrics.json'
             with open(metrics_path, 'r') as f:
                 metrics = json.load(f)
 
-            # 2. Cargar Predicciones (Asumiendo que se guardaron y_test/y_pred en un CSV)
+            # 2. Cargar Predicciones (CSV)
             preds_path = model_results_dir / f'{target}_predictions.csv'
             df_preds = pd.read_csv(preds_path)
 
-            # 3. Cargar Importancia de Variables (Asumiendo que se guardó en un CSV)
+            # 3. Cargar Importancia de Variables (CSV)
             importance_path = model_results_dir / f'{target}_importance.csv'
             df_importance = pd.read_csv(importance_path)
 
-            # Almacenar en la estructura requerida por tab_chemical.py
+            # Almacenar en la estructura requerida
             results[target] = {
                 'y_test': df_preds['y_test'],
                 'y_pred': df_preds['y_pred'],
@@ -118,6 +115,7 @@ def load_chemical_results() -> Dict[str, Dict[str, Any]]:
 
         except FileNotFoundError:
             st.error(f"Falta el archivo de resultados para el target '{target}'. Asegúrese de entrenar y guardar los resultados.")
+            # Si un target falla, devolvemos un conjunto vacío para ese target y continuamos.
         except Exception as e:
             st.error(f"Error inesperado cargando resultados para '{target}': {e}")
 
