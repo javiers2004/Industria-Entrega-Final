@@ -1,0 +1,23 @@
+"""
+Wrapper con cache de Streamlit para carga de datos.
+"""
+import streamlit as st
+from src.utils.data_loader import load_and_clean_data as _load_data, get_data_path
+
+
+@st.cache_data
+def load_and_clean_data():
+    """
+    Carga y limpia el dataset de acero con cache de Streamlit.
+
+    Returns:
+        DataFrame limpio o None si hay error
+    """
+    try:
+        return _load_data()
+    except FileNotFoundError as e:
+        st.error(str(e))
+        return None
+
+
+__all__ = ['load_and_clean_data', 'get_data_path']

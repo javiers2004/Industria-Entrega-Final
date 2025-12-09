@@ -1,131 +1,91 @@
-import streamlit as st
-import pandas as pd
-import requests
-import json
-import os
+"""
+Dashboard EAF - Prediccion de Temperatura y Composicion Quimica
+Punto de entrada principal de la aplicacion Streamlit.
+
+Ejecutar con: streamlit run dashboard/app.py
+"""
+import sys
 from pathlib import Path
 
-# Obtener la ruta al directorio del proyecto
-# Usamos resolve() para obtener la ruta absoluta
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent
-DATA_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final_acero.csv"
+# Añadir raiz del proyecto al path para poder importar src/
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Debug: mostrar ruta si no existe
-if not DATA_PATH.exists():
-    # Intentar ruta alternativa desde el working directory
-    ALT_DATA_PATH = Path(os.getcwd()).parent / "data" / "processed" / "dataset_final_acero.csv"
-    if ALT_DATA_PATH.exists():
-        DATA_PATH = ALT_DATA_PATH
-    else:
-        # Intentar desde la raiz del proyecto asumiendo estructura estandar
-        for parent in Path(os.getcwd()).parents:
-            candidate = parent / "data" / "processed" / "dataset_final_acero.csv"
-            if candidate.exists():
-                DATA_PATH = candidate
-                break
+# Añadir directorio dashboard al path para imports internos
+DASHBOARD_ROOT = Path(__file__).resolve().parent
+if str(DASHBOARD_ROOT) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD_ROOT))
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="Predicción EAF - Grupo 13", layout="wide")
+import streamlit as st
 
-st.title("🏭 Simulador de Horno de Arco Eléctrico")
-st.markdown("### Optimización de Temperatura Final de Colada")
+from utils.cached_loader import load_and_clean_data
+from tabs.tab_eda import render_eda_tab
+from tabs.tab_temperature import render_temperature_tab
+from tabs.tab_chemical import render_chemical_tab
 
-# --- COLUMNA LATERAL: CONTROLES (INPUTS) ---
-st.sidebar.header("Parámetros de Entrada")
 
-def user_input_features():
-    # 1. Energía (Fundamental)
-    power = st.sidebar.slider('Energía Activa Promedio (MW)', 5.0, 100.0, 45.0)
-    time_on = st.sidebar.slider('Tiempo de Encendido (min)', 10, 120, 45)
-    
-    # 2. Materiales CLAVE (Los del Top 10 que te salieron)
-    # Nota: Ajusta los nombres si descubres qué es el '140107'
-    mat_140107 = st.sidebar.number_input('Adición Mat 140107 (kg)', 0, 5000, 0)
-    mat_705043 = st.sidebar.number_input('Adición Mat 705043 (kg)', 0, 2000, 0)
-    mat_360258 = st.sidebar.number_input('Adición Mat 360258 (kg)', 0, 2000, 0)
-    
-    # 3. Química Inicial (Valores típicos por defecto)
-    val_cr = st.sidebar.slider('Cromo Inicial (%)', 0.0, 5.0, 0.15)
-    val_p = st.sidebar.slider('Fósforo Inicial (%)', 0.0, 0.1, 0.01)
-    
-    # Guardamos esto en un diccionario simple
-    data = {
-        'power_active_mean': power,
-        'total_power_on_time': time_on,
-        'added_mat_140107': mat_140107,
-        'added_mat_705043': mat_705043,
-        'added_mat_360258': mat_360258,
-        'valcr': val_cr,
-        'valp': val_p
-        # ... aquí podrías añadir más inputs si quieres
+# Configuracion de pagina (debe ser lo primero)
+st.set_page_config(
+    page_title="Prediccion EAF - Grupo 13",
+    page_icon="🏭",
+    layout="wide"
+)
+
+
+def init_session_state():
+    """Inicializa variables de session_state."""
+    defaults = {
+        'temp_model': None,
+        'temp_features': None,
+        'chem_model': None,
+        'chem_features': None,
+        'chem_target': None
     }
-    return data
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-input_dict = user_input_features()
 
-# --- PANEL PRINCIPAL ---
-col1, col2 = st.columns([2, 1])
+def main():
+    """Funcion principal del dashboard."""
+    # Titulo
+    st.title("Simulador de Horno de Arco Electrico (EAF)")
+    st.markdown("### Optimizacion de Temperatura y Composicion Quimica - Grupo 13")
 
-with col1:
-    st.subheader("Resumen de la Colada")
-    # Mostramos los datos que va a enviar el usuario
-    st.json(input_dict)
+    # Inicializar estado
+    init_session_state()
 
-# --- LÓGICA DE PREDICCIÓN ---
-# Necesitamos cargar la estructura del dataset original para rellenar los huecos
-# (XGBoost necesita recibir TODAS las columnas, aunque sean 0)
-try:
-    # Leemos solo la cabecera para estructura
-    df_structure = pd.read_csv(DATA_PATH, nrows=1)
-    feature_columns = [c for c in df_structure.columns if c not in ['heatid', 'target_temperature']]
-except:
-    st.error(f"⚠️ No encuentro el dataset en: {DATA_PATH}")
-    feature_columns = []
+    # Cargar datos
+    df = load_and_clean_data()
+    if df is None:
+        st.stop()
 
-if st.button('🔥 CALCULAR TEMPERATURA FINAL'):
-    if feature_columns:
-        # CORRECCIÓN AQUÍ: Inicializamos con 0.0 (float) en vez de 0 (int)
-        # Esto evita el error de "incompatible dtype"
-        input_df = pd.DataFrame(0.0, index=[0], columns=feature_columns)
-        
-        # Rellenar con lo que eligió el usuario
-        for key, value in input_dict.items():
-            if key in input_df.columns:
-                # Ahora es seguro asignar floats
-                input_df.at[0, key] = float(value)
-        
-        # Convertir a diccionario para BentoML
-        payload = input_df.to_dict(orient='records')
+    # Tabs principales
+    tab1, tab2, tab3 = st.tabs([
+        "EDA y Resumen del Dataset",
+        "Tarea 1: Prediccion de Temperatura",
+        "Tarea 2: Prediccion de Composicion Quimica"
+    ])
 
-        # Llamada a la API
-        try:
-            response = requests.post(
-                "http://localhost:3000/predict",
-                json={"inputs": payload}, 
-                headers={"content-type": "application/json"}
-            )
-            
-            if response.status_code == 200:
-                temp_pred = response.json()
-                
-                with col2:
-                    st.success("✅ Cálculo Exitoso")
-                    # Formato bonito con 2 decimales
-                    st.metric(label="Temperatura Estimada", value=f"{temp_pred:.2f} °C")
-                    
-                    # Semáforo de calidad
-                    if temp_pred > 1680:
-                        st.error("⚠️ PELIGRO: Sobrecalentamiento extremo")
-                    elif temp_pred > 1650:
-                        st.warning("🔥 Temperatura alta (consumo extra de energía)")
-                    elif temp_pred < 1580:
-                        st.info("❄️ Temperatura baja (riesgo en colada continua)")
-                    else:
-                        st.success("🎯 Temperatura Óptima")
-                        
-            else:
-                st.error(f"Error del servidor: {response.text}")
-                
-        except Exception as e:
-            st.error(f"No se pudo conectar con BentoML. Asegúrate de que la terminal 'bentoml serve' está corriendo.\nError: {e}")
+    with tab1:
+        render_eda_tab(df)
+
+    with tab2:
+        render_temperature_tab(df)
+
+    with tab3:
+        render_chemical_tab(df)
+
+    # Footer
+    st.divider()
+    st.markdown(
+        "<div style='text-align: center; color: gray;'>"
+        "Desarrollado por Grupo 13 - Curso de Industria 4.0 | 2024-2025"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+
+if __name__ == "__main__":
+    main()
