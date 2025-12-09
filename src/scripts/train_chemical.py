@@ -12,6 +12,7 @@ Ejemplos:
 Targets disponibles: valc, valmn, valsi, valp, vals
 """
 import argparse
+import json # Importacion nueva para guardar las metricas
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 
@@ -143,8 +144,12 @@ def train_chemical_model(
 
 
 def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_dir: Path):
-    """Guarda graficos de importancia y predicciones."""
+    """Guarda graficos, métricas y datos de prediccion para el dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Crear el subdirectorio específico para resultados químicos
+    chemical_results_dir = output_dir / "chemical_results"
+    chemical_results_dir.mkdir(parents=True, exist_ok=True)
 
     # Grafico de importancia de variables
     importance_df = get_feature_importance(model, feature_names, model_type)
@@ -158,6 +163,11 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
         plt.savefig(output_dir / f'importancia_{target}.png', dpi=150)
         plt.close()
         logger.info(f"Guardado: {output_dir / f'importancia_{target}.png'}")
+
+        # Guardar Importancia de Variables para el dashboard
+        importance_path = chemical_results_dir / f'{target}_importance.csv'
+        importance_df.to_csv(importance_path, index=False)
+        logger.info(f"Guardado: {importance_path}")
 
     # Grafico de predicciones vs reales
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -173,6 +183,19 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
     plt.savefig(output_dir / f'predicciones_{target}.png', dpi=150)
     plt.close()
     logger.info(f"Guardado: {output_dir / f'predicciones_{target}.png'}")
+
+    # Guardar Predicciones (y_test y y_pred) para el dashboard
+    df_preds = pd.DataFrame({'y_test': y_test, 'y_pred': y_pred})
+    preds_path = chemical_results_dir / f'{target}_predictions.csv'
+    df_preds.to_csv(preds_path, index=False)
+    logger.info(f"Guardado: {preds_path}")
+
+    # Guardar Métricas para el dashboard
+    metrics = calculate_metrics(y_test, y_pred)
+    metrics_path = chemical_results_dir / f'{target}_metrics.json'
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics, f, indent=4)
+    logger.info(f"Guardado: {metrics_path}")
 
 
 def main():
@@ -239,7 +262,7 @@ def main():
         learning_rate=args.learning_rate
     )
 
-    # Guardar graficos
+    # Guardar graficos y datos
     if not args.no_plots:
         output_dir = get_project_root() / args.output_dir
         save_plots(model, feature_names, model_type, args.target, y_test, y_pred, output_dir)

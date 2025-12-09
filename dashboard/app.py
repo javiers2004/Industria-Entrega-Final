@@ -77,7 +77,7 @@ def main():
         render_temperature_tab(df)
 
     with tab3:
-        render_chemical_tab(df)
+        render_chemical_tab()
 
     # Footer
     st.divider()

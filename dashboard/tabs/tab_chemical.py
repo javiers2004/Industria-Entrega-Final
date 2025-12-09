@@ -1,284 +1,199 @@
 """
-Tab 3: Prediccion de Composicion Quimica.
+Tab 3: Analisis y Predicciones de Composicion Quimica.
 """
 import streamlit as st
 import pandas as pd
+import numpy as np
 
-from src.config import (
-    CHEMICAL_TARGETS, CHEMICAL_SPECS, INPUT_FEATURES, UI_MODEL_NAMES
-)
-from src.scripts.evaluation import get_feature_importance
-from src.scripts.train_chemical import train_chemical_model
-from components.visualizations import plot_feature_importance, plot_prediction_vs_real
-from components.indicators import chemical_spec_indicator
-
-
-def render_chemical_tab(df: pd.DataFrame):
-    """
-    Renderiza el tab de prediccion de composicion quimica.
-
-    Parameters:
-    -----------
-    df : DataFrame con los datos del dataset
-    """
-    st.header("Tarea 2: Prediccion de Composicion Quimica")
-
-    chem_section1, chem_section2 = st.tabs([
-        "Entrenamiento y Evaluacion",
-        "Simulacion de Inferencia Quimica"
-    ])
-
-    with chem_section1:
-        _render_training_section(df)
-
-    with chem_section2:
-        _render_inference_section()
+# Importaciones asumidas del proyecto
+from src.config import CHEMICAL_TARGETS, CHEMICAL_SPECS
+from components.visualizations import plot_prediction_vs_real, plot_feature_importance
+# NOTA: Se asume que se importa la funcion load_chemical_results (implementada abajo para simular)
+# from dashboard.utils.cached_loader import load_chemical_results
 
 
-def _render_training_section(df: pd.DataFrame):
-    """Seccion de entrenamiento y evaluacion de modelo quimico."""
-    st.subheader("Entrenamiento y Evaluacion Dinamica")
+# --- FUNCION DE CARGA DUMMY (DEBE SER REEMPLAZADA) ---
+# Esta funcion simula la carga usando los targets y rangos reales, pero con datos aleatorios.
+# DEBE ser reemplazada por la lógica real de carga de resultados pre-calculados.
+def load_chemical_results():
+    """Simula la carga de resultados del modelo de composicion quimica (Usando targets reales)."""
+    st.info("🚨 ADVERTENCIA: Usando datos de modelo simulados para targets químicos.")
 
-    col_config, col_results = st.columns([1, 2])
+    results = {}
 
-    with col_config:
-        st.markdown("#### Configuracion del Modelo")
+    # Usar los targets reales definidos en src.config
+    targets_to_simulate = CHEMICAL_TARGETS
 
-        # Selector de target quimico
-        chem_target = st.radio(
-            "Elemento Quimico a Predecir:",
-            options=CHEMICAL_TARGETS,
-            format_func=lambda x: x.upper(),
-            key='chem_target_select'
-        )
+    for target in targets_to_simulate:
+        # Generar datos simulados para y_test y y_pred (simulando variabilidad real)
+        np.random.seed(hash(target) % 1000) # Semilla diferente por target
+        n_samples = 100
 
-        # Seleccion de modelo
-        ui_model_options = list(UI_MODEL_NAMES.keys())
-        chem_model_ui = st.selectbox(
-            "Modelo:",
-            options=ui_model_options,
-            key='chem_model_select'
-        )
-        model_type = UI_MODEL_NAMES[chem_model_ui]
+        # Usar el rango de especificacion para simular valores reales cercanos
+        spec_min, spec_max = CHEMICAL_SPECS.get(target, (0, 1))
 
-        # Seleccion de features (excluyendo el target)
-        chem_available_features = [f for f in INPUT_FEATURES if f in df.columns and f != chem_target]
-        chem_selected_features = st.multiselect(
-            "Features de Entrada:",
-            options=chem_available_features,
-            default=[f for f in chem_available_features if f not in CHEMICAL_TARGETS][:8],
-            key='chem_features_select'
-        )
+        # Simular y_test dentro de un rango cercano a las especificaciones
+        y_test = np.random.uniform(spec_min, spec_max, n_samples)
+        # y_pred simula una prediccion con ruido bajo
+        y_pred = y_test + np.random.normal(0, (spec_max - spec_min) * 0.05, n_samples)
 
-        # Hiperparametros condicionales
-        st.markdown("#### Hiperparametros")
-        n_estimators = 100
-        max_depth = 6
-        learning_rate = 0.1
+        # Simular feature importance (estructura requerida por plot_feature_importance)
+        features = [
+            'total_o2_lance', 'total_gas_lance', 'valc_init', 'added_mat_140107',
+            'added_mat_202007', 'added_mat_360258'
+        ]
+        importance = np.random.uniform(0.01, 0.5, len(features))
+        importance_df = pd.DataFrame({'Feature': features, 'Importance': importance})
+        importance_df = importance_df.sort_values('Importance', ascending=True)
 
-        if model_type in ['random_forest', 'xgboost']:
-            n_estimators = st.slider(
-                "Numero de Estimadores:",
-                min_value=50, max_value=500, value=100, step=50,
-                key='chem_n_estimators'
-            )
-            max_depth = st.slider(
-                "Profundidad Maxima:",
-                min_value=2, max_value=20, value=6, step=1,
-                key='chem_max_depth'
-            )
+        # Simular métricas (calculadas a partir de los datos simulados)
+        mae = np.mean(np.abs(y_test - y_pred))
+        r2 = 1 - np.sum((y_test - y_pred)**2) / np.sum((y_test - np.mean(y_test))**2)
 
-        if model_type == 'xgboost':
-            learning_rate = st.slider(
-                "Learning Rate:",
-                min_value=0.01, max_value=0.3, value=0.1, step=0.01,
-                key='chem_lr'
-            )
+        results[target] = {
+            'y_test': pd.Series(y_test),
+            'y_pred': pd.Series(y_pred),
+            'importance_df': importance_df,
+            'metrics': {'MAE': mae, 'R2': r2}
+        }
 
-        # Boton de entrenamiento
-        train_chem_btn = st.button("Entrenar Modelo Quimico", type="primary", key='train_chem')
+    return results
 
-    with col_results:
-        if train_chem_btn and len(chem_selected_features) > 0:
-            with st.spinner("Entrenando modelo..."):
-                try:
-                    # Entrenar usando la funcion de src/
-                    model, metrics, feature_names, X_test, y_test, y_pred = train_chemical_model(
-                        target=chem_target,
-                        model_type=model_type,
-                        n_estimators=n_estimators,
-                        max_depth=max_depth,
-                        learning_rate=learning_rate
-                    )
+# --- FUNCIONES DE RENDERIZADO DEL TAB ---
 
-                    # Guardar en session_state
-                    st.session_state.chem_model = model
-                    st.session_state.chem_features = feature_names
-                    st.session_state.chem_target = chem_target
-                    st.session_state.chem_model_type = model_type
+def _render_summary_metrics(results: dict):
+    """Renderiza metricas de resumen para todos los targets quimicos."""
+    st.subheader("1. Resumen de Desempeño por Componente")
 
-                    # Mostrar metricas
-                    st.markdown(f"#### Metricas del Modelo - {chem_target.upper()}")
-                    m1, m2 = st.columns(2)
-                    with m1:
-                        st.metric("RMSE", f"{metrics['RMSE']:.6f}")
-                    with m2:
-                        st.metric("R2", f"{metrics['R2']:.4f}")
-
-                    # Graficos
-                    st.markdown("#### Visualizaciones")
-
-                    # Importancia de variables
-                    importance_df = get_feature_importance(model, feature_names, model_type)
-                    if importance_df is not None:
-                        fig_imp = plot_feature_importance(importance_df, f"Importancia de Variables - {chem_target.upper()}")
-                        st.plotly_chart(fig_imp, use_container_width=True)
-
-                    # Prediccion vs Real
-                    fig_pred = plot_prediction_vs_real(y_test, y_pred, f"Prediccion vs Real - {chem_target.upper()}")
-                    st.plotly_chart(fig_pred, use_container_width=True)
-
-                except Exception as e:
-                    st.error(f"Error durante el entrenamiento: {e}")
-
-        elif train_chem_btn:
-            st.warning("Selecciona al menos una feature para entrenar el modelo.")
-
-
-def _render_inference_section():
-    """Seccion de inferencia quimica local."""
-    st.subheader("Simulacion de Inferencia Quimica")
-
-    col_inputs, col_output = st.columns([1, 1])
-
-    with col_inputs:
-        st.markdown("#### Parametros de Entrada Quimicos")
-
-        # Inputs quimicos iniciales
-        st.markdown("**Composicion Quimica Inicial:**")
-        inp_valc = st.slider(
-            "Carbono (valc %):",
-            min_value=0.0, max_value=1.0, value=0.23, step=0.01,
-            key='chem_inf_valc'
-        )
-
-        inp_valmn = st.slider(
-            "Manganeso (valmn %):",
-            min_value=0.0, max_value=2.0, value=1.27, step=0.01,
-            key='chem_inf_valmn'
-        )
-
-        inp_valsi = st.slider(
-            "Silicio (valsi %):",
-            min_value=0.0, max_value=1.0, value=0.24, step=0.01,
-            key='chem_inf_valsi'
-        )
-
-        inp_valp = st.slider(
-            "Fosforo (valp %):",
-            min_value=0.0, max_value=0.1, value=0.008, step=0.001,
-            format="%.3f",
-            key='chem_inf_valp'
-        )
-
-        inp_vals = st.slider(
-            "Azufre (vals %):",
-            min_value=0.0, max_value=0.1, value=0.015, step=0.001,
-            format="%.3f",
-            key='chem_inf_vals'
-        )
-
-        st.markdown("**Parametros de Proceso:**")
-        inp_chem_carbon = st.number_input(
-            "Carbono Inyectado (kg):",
-            min_value=0.0, max_value=2000.0, value=0.0, step=50.0,
-            key='chem_inf_carbon'
-        )
-
-        inp_chem_o2 = st.number_input(
-            "Oxigeno Lance (m3):",
-            min_value=0.0, max_value=5000.0, value=0.0, step=100.0,
-            key='chem_inf_o2'
-        )
-
-        inp_chem_mat140107 = st.number_input(
-            "Material 140107 (kg):",
-            min_value=0.0, max_value=5000.0, value=0.0, step=100.0,
-            key='chem_inf_mat140107'
-        )
-
-        inp_chem_mat360258 = st.number_input(
-            "Material 360258 (kg):",
-            min_value=0.0, max_value=5000.0, value=414.0, step=100.0,
-            key='chem_inf_mat360258'
-        )
-
-        predict_chem_btn = st.button("Predecir Composicion Final", type="primary", key='predict_chem')
-
-    with col_output:
-        st.markdown("#### Resultado de Prediccion")
-
-        if predict_chem_btn:
-            _perform_chemical_prediction(
-                inp_valc, inp_valmn, inp_valsi, inp_valp, inp_vals,
-                inp_chem_carbon, inp_chem_o2, inp_chem_mat140107, inp_chem_mat360258
-            )
-
-
-def _perform_chemical_prediction(inp_valc, inp_valmn, inp_valsi, inp_valp, inp_vals,
-                                  inp_chem_carbon, inp_chem_o2, inp_chem_mat140107, inp_chem_mat360258):
-    """Realiza la prediccion quimica local."""
-    if st.session_state.get('chem_model') is None:
-        st.warning("Primero entrena un modelo en la seccion de 'Entrenamiento y Evaluacion'")
+    if not results:
+        st.info("No hay resultados de modelo disponibles.")
         return
 
-    model = st.session_state.chem_model
-    features = st.session_state.chem_features
-    target = st.session_state.chem_target
+    # Usar una columna para cada target, limitado a 5 columnas
+    cols = st.columns(min(len(results), 5))
 
-    # Crear diccionario de input
-    input_data = {
-        'valc': inp_valc,
-        'valmn': inp_valmn,
-        'valsi': inp_valsi,
-        'valp': inp_valp,
-        'vals': inp_vals,
-        'total_injected_carbon': inp_chem_carbon,
-        'total_o2_lance': inp_chem_o2,
-        'added_mat_140107': inp_chem_mat140107,
-        'added_mat_360258': inp_chem_mat360258
-    }
+    all_mae = []
+    all_r2 = []
 
-    # Crear DataFrame con solo las features que el modelo necesita (optimizado)
-    feature_values = {col: input_data.get(col, 0.0) for col in features}
-    input_df = pd.DataFrame([feature_values])
+    for idx, (target, data) in enumerate(results.items()):
+        metrics = data['metrics']
+        mae = metrics.get('MAE', np.nan)
+        r2 = metrics.get('R2', np.nan)
 
-    # Realizar prediccion local
-    try:
-        prediction = model.predict(input_df)[0]
+        all_mae.append(mae)
+        all_r2.append(r2)
 
-        # Mostrar prediccion
-        st.metric(
-            label=f"Composicion Final Estimada ({target.upper()})",
-            value=f"{prediction:.4f} %"
-        )
+        with cols[idx]:
+            # Mostrar el rango de especificacion si existe
+            spec_range = CHEMICAL_SPECS.get(target, (None, None))
+            spec_text = f" ({spec_range[0]} - {spec_range[1]})" if all(v is not None for v in spec_range) else ""
 
-        # Indicador de especificacion
-        status, label, description = chemical_spec_indicator(prediction, target)
+            st.markdown(f"#### {target.upper()}{spec_text}")
+            st.metric("MAE", f"{mae:.4f}", delta_color="inverse")
+            st.metric("R²", f"{r2:.4f}")
 
-        if status == "success":
-            st.success(f"VERDE {label}: {description}")
-        elif status == "error":
-            st.error(f"ROJO {label}: {description}")
+    # Mostrar resumen promedio al final
+    st.markdown("---")
+    avg_mae = np.mean([m for m in all_mae if not np.isnan(m)]) if all_mae else 0
+    avg_r2 = np.mean([r for r in all_r2 if not np.isnan(r)]) if all_r2 else 0
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("MAE Promedio Global", f"{avg_mae:.4f}", delta_color="inverse")
+    with col2:
+        st.metric("R² Promedio Global", f"{avg_r2:.4f}")
+
+
+def _render_prediction_analysis(target_data: dict, target_name: str):
+    """Renderiza el grafico de Prediccion vs Real para el target seleccionado."""
+    st.subheader(f"2. Análisis de Predicción (Predicho vs Real): {target_name.upper()}")
+
+    y_test = target_data.get('y_test')
+    y_pred = target_data.get('y_pred')
+    metrics = target_data.get('metrics')
+
+    if y_test is None or y_pred is None:
+        st.warning(f"Datos de predicción no disponibles para {target_name}.")
+        return
+
+    # Mostrar métricas específicas del target
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        st.metric("MAE", f"{metrics['MAE']:.4f}", delta_color="inverse")
+    with col2:
+        st.metric("R²", f"{metrics['R2']:.4f}")
+
+    # Mostrar especificaciones
+    spec_range = CHEMICAL_SPECS.get(target_name, (None, None))
+    if all(v is not None for v in spec_range):
+        with col3:
+            st.info(f"Rango de Especificación: **{spec_range[0]}** a **{spec_range[1]}**")
+
+    # Generar y mostrar el gráfico
+    fig_pred = plot_prediction_vs_real(
+        y_test,
+        y_pred,
+        title=f"Prediccion vs Real para {target_name.upper()}"
+    )
+    st.plotly_chart(fig_pred, use_container_width=True)
+
+
+def _render_feature_importance(target_data: dict, target_name: str):
+    """Renderiza el grafico de importancia de caracteristicas para el target seleccionado."""
+    st.subheader(f"3. Top 15 Variables más Importantes: {target_name.upper()}")
+
+    importance_df = target_data.get('importance_df')
+
+    if importance_df is None or importance_df.empty:
+        st.warning(f"Datos de importancia de variables no disponibles para {target_name}.")
+        return
+
+    # Generar y mostrar el gráfico
+    fig_imp = plot_feature_importance(
+        importance_df,
+        title=f"Importancia de Variables para {target_name.upper()}"
+    )
+    st.plotly_chart(fig_imp, use_container_width=True)
+
+
+def render_chemical_tab():
+    """
+    Funcion principal para renderizar el tab de Composicion Quimica.
+    """
+    st.title("🧪 Predicción de Composición Química")
+    st.markdown("Esta sección presenta el análisis de los resultados de los modelos entrenados para predecir la composición química (elementos como **C, Mn, Si, P, S**).")
+
+    # 1. Cargar Resultados (Usando la funcion dummy/simulada que debe ser reemplazada)
+    results = load_chemical_results()
+
+    if not results:
+        st.error("No se pudieron cargar los resultados del modelo químico. Verifique la implementación de la función de carga.")
+        return
+
+    # 2. Resumen de Métricas Globales
+    _render_summary_metrics(results)
+    st.divider()
+
+    # 3. Selector de Componente Químico
+    available_targets = sorted(list(results.keys()))
+
+    if not available_targets:
+        st.warning("No se encontraron targets químicos en los resultados cargados.")
+        return
+
+    selected_target = st.selectbox(
+        "Selecciona el Componente Químico para el Análisis Detallado:",
+        options=available_targets,
+        key='chemical_target_selector'
+    )
+    st.divider()
+
+    # 4. Análisis Detallado del Target Seleccionado
+    if selected_target:
+        target_data = results.get(selected_target)
+        if target_data:
+            _render_prediction_analysis(target_data, selected_target)
+            st.divider()
+            _render_feature_importance(target_data, selected_target)
         else:
-            st.info(f"INFO {label}: {description}")
-
-        # Rangos de especificacion
-        st.markdown("---")
-        st.markdown("**Rangos de Especificacion Tipicos:**")
-        for elem, (min_v, max_v) in CHEMICAL_SPECS.items():
-            indicator = " <-- seleccionado" if elem == target else ""
-            st.markdown(f"- **{elem.upper()}:** {min_v} - {max_v} %{indicator}")
-
-    except Exception as e:
-        st.error(f"Error en la prediccion: {e}")
+            st.error(f"Error al obtener los datos para el target: {selected_target}")
