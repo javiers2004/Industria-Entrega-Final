@@ -2,12 +2,28 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import os
 from pathlib import Path
 
 # Obtener la ruta al directorio del proyecto
-SCRIPT_DIR = Path(__file__).parent
+# Usamos resolve() para obtener la ruta absoluta
+SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final_acero.csv"
+
+# Debug: mostrar ruta si no existe
+if not DATA_PATH.exists():
+    # Intentar ruta alternativa desde el working directory
+    ALT_DATA_PATH = Path(os.getcwd()).parent / "data" / "processed" / "dataset_final_acero.csv"
+    if ALT_DATA_PATH.exists():
+        DATA_PATH = ALT_DATA_PATH
+    else:
+        # Intentar desde la raiz del proyecto asumiendo estructura estandar
+        for parent in Path(os.getcwd()).parents:
+            candidate = parent / "data" / "processed" / "dataset_final_acero.csv"
+            if candidate.exists():
+                DATA_PATH = candidate
+                break
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Predicción EAF - Grupo 13", layout="wide")

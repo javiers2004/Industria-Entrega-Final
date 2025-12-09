@@ -62,6 +62,31 @@ def load_dataset(filepath: Path) -> pd.DataFrame:
     return df
 
 
+def convert_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convierte columnas con separador decimal coma a numerico.
+
+    Args:
+        df: DataFrame con posibles columnas con comas
+
+    Returns:
+        DataFrame con columnas convertidas a numerico
+    """
+    df = df.copy()
+
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            # Intentar convertir reemplazando coma por punto
+            try:
+                df[col] = df[col].str.replace(',', '.', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                print(f"  Convertida columna '{col}' a numerico")
+            except Exception:
+                pass
+
+    return df
+
+
 def prepare_data(df: pd.DataFrame):
     """
     Prepara los datos para entrenamiento.
@@ -79,6 +104,13 @@ def prepare_data(df: pd.DataFrame):
     feature_cols = [c for c in df.columns if c not in exclude_cols]
     X = df[feature_cols].copy()
     y = df['target_temperature'].copy()
+
+    # Convertir columnas con comas a numerico
+    print("Convirtiendo tipos de datos...")
+    X = convert_to_numeric(X)
+
+    # Rellenar NaNs con 0
+    X = X.fillna(0)
 
     print(f"Features: {len(feature_cols)} columnas")
     print(f"Target: target_temperature")
