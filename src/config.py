@@ -2,6 +2,8 @@
 Configuracion y constantes globales del proyecto EAF.
 Compartidas entre src/ y dashboard/.
 """
+import os
+from typing import Dict, List, Tuple
 
 # Features de Input disponibles en el dataset
 INPUT_FEATURES = [
@@ -43,8 +45,15 @@ TEMPERATURE_RANGES = {
     'optimal_max': 1650,
 }
 
-# URL del servicio BentoML
-BENTOML_URL = "http://localhost:3000"
+# URL del servicio BentoML (configurable via variable de entorno)
+BENTOML_URL: str = os.getenv('BENTOML_URL', 'http://localhost:3000')
+
+# Mapeo de nombres de modelos para UI (inverso de MODEL_DISPLAY_NAMES)
+UI_MODEL_NAMES: Dict[str, str] = {
+    'Linear Regression': 'linear',
+    'Random Forest Regressor': 'random_forest',
+    'XGBoost Regressor': 'xgboost'
+}
 
 # Hiperparametros por defecto
 DEFAULT_HYPERPARAMS = {

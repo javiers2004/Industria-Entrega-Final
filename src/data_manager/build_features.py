@@ -18,8 +18,13 @@ Requisitos:
 
 import os
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_project_root() -> Path:
@@ -39,6 +44,12 @@ def load_standardized(filepath: Path) -> pd.DataFrame:
     """
     df = pd.read_csv(filepath, low_memory=False)
     df.columns = df.columns.str.lower().str.strip()
+
+    # Convertir comas decimales a puntos (formato europeo -> americano)
+    for col in df.select_dtypes(include=['object']).columns:
+        if df[col].astype(str).str.match(r'^-?\d+,\d+$').any():
+            df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+
     return df
 
 
@@ -117,6 +128,46 @@ def pivot_materials(df_ladle: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
     return pivot_ladle
 
 
+def get_final_chemical_composition(df_chem_final: pd.DataFrame) -> pd.DataFrame:
+    """
+    Obtiene la composicion quimica final de cada colada.
+
+    Args:
+        df_chem_final: DataFrame con datos de eaf_final_chemical_measurements.csv
+
+    Returns:
+        DataFrame con heatid y targets quimicos (target_valc, target_valmn, etc.)
+    """
+    # Elementos quimicos a extraer como targets
+    chemical_elements = ['valc', 'valmn', 'valsi', 'valp', 'vals']
+
+    # Verificar que existan las columnas
+    available_elements = [col for col in chemical_elements if col in df_chem_final.columns]
+
+    if not available_elements:
+        logger.warning("No se encontraron columnas de elementos quimicos en el archivo")
+        return pd.DataFrame()
+
+    # Seleccionar heatid y elementos quimicos
+    cols_to_select = ['heatid'] + available_elements
+    df_targets = df_chem_final[cols_to_select].copy()
+
+    # Convertir a numerico
+    for col in available_elements:
+        df_targets[col] = pd.to_numeric(df_targets[col], errors='coerce')
+
+    # Renombrar con prefijo target_
+    rename_dict = {col: f'target_{col}' for col in available_elements}
+    df_targets = df_targets.rename(columns=rename_dict)
+
+    # Eliminar duplicados por heatid (tomar el ultimo registro)
+    df_targets = df_targets.drop_duplicates(subset=['heatid'], keep='last')
+
+    logger.info(f"Targets quimicos extraidos: {len(df_targets)} coladas, {len(available_elements)} elementos")
+
+    return df_targets
+
+
 def get_final_temperature(df_temp: pd.DataFrame) -> pd.DataFrame:
     """
     Obtiene la temperatura final (al vaciado) de cada colada.
@@ -159,7 +210,7 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     Returns:
         DataFrame maestro con inputs
     """
-    print("Cargando archivos...")
+    logger.info("Cargando archivos...")
 
     # Cargar archivos necesarios
     df_gas = load_standardized(raw_data_dir / "eaf_gaslance_mat.csv")
@@ -167,16 +218,16 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     df_ladle = load_standardized(raw_data_dir / "ladle_tapping.csv")
     df_chem_initial = load_standardized(raw_data_dir / "lf_initial_chemical_measurements.csv")
 
-    print("Agregando series temporales...")
+    logger.info("Agregando series temporales...")
 
     # Agregar datos
     grp_gas = aggregate_gas_data(df_gas)
     grp_inj = aggregate_injection_data(df_inj)
 
-    print("Pivotando materiales...")
+    logger.info("Pivotando materiales...")
     pivot_ladle = pivot_materials(df_ladle)
 
-    print("Fusionando dataset maestro...")
+    logger.info("Fusionando dataset maestro...")
 
     # Dataset base: mediciones quimicas iniciales
     df_master = df_chem_initial.copy()
@@ -190,9 +241,47 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     cols_to_fix = ['total_o2_lance', 'total_gas_lance', 'total_injected_carbon']
     df_master[cols_to_fix] = df_master[cols_to_fix].fillna(0)
 
-    print(f"Dataset maestro (inputs): {df_master.shape}")
+    logger.info(f"Dataset maestro (inputs): {df_master.shape}")
 
     return df_master
+
+
+def add_chemical_targets(df_master: pd.DataFrame, raw_data_dir: Path) -> pd.DataFrame:
+    """
+    Agrega las variables target de composicion quimica al dataset maestro.
+
+    Args:
+        df_master: DataFrame con inputs
+        raw_data_dir: Ruta al directorio con los datos raw
+
+    Returns:
+        DataFrame final con inputs y targets quimicos
+    """
+    logger.info("Agregando targets de composicion quimica...")
+
+    df_chem_final = load_standardized(raw_data_dir / "eaf_final_chemical_measurements.csv")
+    df_targets = get_final_chemical_composition(df_chem_final)
+
+    if df_targets.empty:
+        raise ValueError("No se pudieron extraer los targets quimicos")
+
+    # Merge (inner join - solo coladas con datos completos)
+    df_final = df_master.merge(df_targets, on='heatid', how='inner')
+
+    # Limpieza final
+    cols_drop = ['datetime', 'positionrow', 'filter_key_date', 'measure_time']
+    df_final = df_final.drop(columns=[c for c in cols_drop if c in df_final.columns])
+
+    # Eliminar filas donde todos los targets son nulos
+    target_cols = [c for c in df_final.columns if c.startswith('target_')]
+    df_final = df_final.dropna(subset=target_cols, how='all')
+
+    # Rellenar nulos en inputs con 0
+    df_final = df_final.fillna(0)
+
+    logger.info(f"Dataset quimico final: {df_final.shape}")
+
+    return df_final
 
 
 def add_target(df_master: pd.DataFrame, raw_data_dir: Path) -> pd.DataFrame:
@@ -206,7 +295,7 @@ def add_target(df_master: pd.DataFrame, raw_data_dir: Path) -> pd.DataFrame:
     Returns:
         DataFrame final con inputs y target
     """
-    print("Agregando variable target (temperatura)...")
+    logger.info("Agregando variable target (temperatura)...")
 
     df_temp = load_standardized(raw_data_dir / "eaf_temp.csv")
     df_target = get_final_temperature(df_temp)
@@ -224,31 +313,100 @@ def add_target(df_master: pd.DataFrame, raw_data_dir: Path) -> pd.DataFrame:
     # Rellenar nulos en inputs con 0
     df_final = df_final.fillna(0)
 
-    print(f"Dataset final: {df_final.shape}")
+    logger.info(f"Dataset final: {df_final.shape}")
 
     return df_final
 
 
-def build_features(force: bool = False) -> Path:
+def build_temperature_dataset(raw_data_dir: Path, processed_data_dir: Path, force: bool = False) -> Optional[Path]:
     """
-    Pipeline completo para construir el dataset final.
+    Construye el dataset para prediccion de temperatura.
 
     Args:
+        raw_data_dir: Ruta al directorio con los datos raw
+        processed_data_dir: Ruta al directorio de salida
         force: Si es True, reconstruye aunque exista el archivo
 
     Returns:
-        Path al archivo de dataset final
+        Path al archivo de dataset o None si ya existe y force=False
+    """
+    output_file = processed_data_dir / "dataset_final_temp.csv"
+
+    # Verificar si ya existe
+    if output_file.exists() and not force:
+        logger.info(f"Dataset de temperatura ya existe: {output_file}")
+        return output_file
+
+    logger.info("=" * 50)
+    logger.info("CONSTRUYENDO DATASET DE TEMPERATURA")
+    logger.info("=" * 50)
+
+    df_master = build_master_dataset(raw_data_dir)
+    df_final = add_target(df_master, raw_data_dir)
+
+    # Guardar
+    df_final.to_csv(output_file, index=False)
+    logger.info(f"Dataset de temperatura guardado en: {output_file}")
+
+    # Mostrar resumen
+    logger.info(f"Filas: {len(df_final)}, Columnas: {len(df_final.columns)}")
+
+    return output_file
+
+
+def build_chemical_dataset(raw_data_dir: Path, processed_data_dir: Path, force: bool = False) -> Optional[Path]:
+    """
+    Construye el dataset para prediccion de composicion quimica.
+
+    Args:
+        raw_data_dir: Ruta al directorio con los datos raw
+        processed_data_dir: Ruta al directorio de salida
+        force: Si es True, reconstruye aunque exista el archivo
+
+    Returns:
+        Path al archivo de dataset o None si ya existe y force=False
+    """
+    output_file = processed_data_dir / "dataset_final_chemical.csv"
+
+    # Verificar si ya existe
+    if output_file.exists() and not force:
+        logger.info(f"Dataset quimico ya existe: {output_file}")
+        return output_file
+
+    logger.info("=" * 50)
+    logger.info("CONSTRUYENDO DATASET DE COMPOSICION QUIMICA")
+    logger.info("=" * 50)
+
+    df_master = build_master_dataset(raw_data_dir)
+    df_final = add_chemical_targets(df_master, raw_data_dir)
+
+    # Guardar
+    df_final.to_csv(output_file, index=False)
+    logger.info(f"Dataset quimico guardado en: {output_file}")
+
+    # Mostrar resumen
+    logger.info(f"Filas: {len(df_final)}, Columnas: {len(df_final.columns)}")
+    target_cols = [c for c in df_final.columns if c.startswith('target_')]
+    logger.info(f"Targets: {target_cols}")
+
+    return output_file
+
+
+def build_features(force: bool = False, temp_only: bool = False, chem_only: bool = False) -> tuple:
+    """
+    Pipeline completo para construir los datasets finales.
+
+    Args:
+        force: Si es True, reconstruye aunque existan los archivos
+        temp_only: Si es True, solo genera dataset de temperatura
+        chem_only: Si es True, solo genera dataset quimico
+
+    Returns:
+        Tuple con (path_temp, path_chemical) o solo uno si se especifica *_only
     """
     project_root = get_project_root()
     raw_data_dir = project_root / "data" / "raw"
     processed_data_dir = project_root / "data" / "processed"
-    output_file = processed_data_dir / "dataset_final_acero.csv"
-
-    # Verificar si ya existe
-    if output_file.exists() and not force:
-        print(f"El dataset ya existe: {output_file}")
-        print("Usa force=True para reconstruir.")
-        return output_file
 
     # Verificar que existan los datos raw
     if not raw_data_dir.exists():
@@ -260,37 +418,40 @@ def build_features(force: bool = False) -> Path:
     # Crear directorio de salida
     processed_data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Construir dataset
-    print("=" * 50)
-    print("CONSTRUYENDO DATASET FINAL")
-    print("=" * 50)
+    path_temp = None
+    path_chem = None
 
-    df_master = build_master_dataset(raw_data_dir)
-    df_final = add_target(df_master, raw_data_dir)
+    # Construir dataset de temperatura
+    if not chem_only:
+        path_temp = build_temperature_dataset(raw_data_dir, processed_data_dir, force)
 
-    # Guardar
-    df_final.to_csv(output_file, index=False)
-    print(f"\nDataset guardado en: {output_file}")
+    # Construir dataset quimico
+    if not temp_only:
+        path_chem = build_chemical_dataset(raw_data_dir, processed_data_dir, force)
 
-    # Mostrar resumen
-    print("\n" + "=" * 50)
-    print("RESUMEN DEL DATASET")
-    print("=" * 50)
-    print(f"Filas: {len(df_final)}")
-    print(f"Columnas: {len(df_final.columns)}")
-    print(f"\nColumnas disponibles:")
-    for col in df_final.columns:
-        print(f"  - {col}")
+    logger.info("=" * 50)
+    logger.info("CONSTRUCCION COMPLETADA")
+    logger.info("=" * 50)
 
-    return output_file
+    if path_temp:
+        logger.info(f"  - Temperatura: {path_temp}")
+    if path_chem:
+        logger.info(f"  - Quimico: {path_chem}")
+
+    return (path_temp, path_chem)
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Construir dataset de features para el proyecto EAF")
-    parser.add_argument("--force", "-f", action="store_true", help="Forzar reconstruccion del dataset")
+    parser = argparse.ArgumentParser(description="Construir datasets de features para el proyecto EAF")
+    parser.add_argument("--force", "-f", action="store_true", help="Forzar reconstruccion de los datasets")
+    parser.add_argument("--temp-only", action="store_true", help="Solo generar dataset de temperatura")
+    parser.add_argument("--chem-only", action="store_true", help="Solo generar dataset de composicion quimica")
 
     args = parser.parse_args()
 
-    build_features(force=args.force)
+    if args.temp_only and args.chem_only:
+        parser.error("No se puede usar --temp-only y --chem-only a la vez")
+
+    build_features(force=args.force, temp_only=args.temp_only, chem_only=args.chem_only)

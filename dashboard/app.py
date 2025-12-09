@@ -38,9 +38,11 @@ def init_session_state():
     defaults = {
         'temp_model': None,
         'temp_features': None,
+        'temp_model_type': None,
         'chem_model': None,
         'chem_features': None,
-        'chem_target': None
+        'chem_target': None,
+        'chem_model_type': None
     }
     for key, value in defaults.items():
         if key not in st.session_state:

@@ -20,6 +20,7 @@ Requisitos:
 """
 
 from pathlib import Path
+from typing import Dict, Optional, Tuple, Any
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 try:
     import xgboost as xgb
@@ -58,7 +63,7 @@ def load_dataset(filepath: Path) -> pd.DataFrame:
         DataFrame con los datos
     """
     df = pd.read_csv(filepath)
-    print(f"Dataset cargado: {df.shape[0]} filas, {df.shape[1]} columnas")
+    logger.info(f"Dataset cargado: {df.shape[0]} filas, {df.shape[1]} columnas")
     return df
 
 
@@ -80,9 +85,9 @@ def convert_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
             try:
                 df[col] = df[col].str.replace(',', '.', regex=False)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                print(f"  Convertida columna '{col}' a numerico")
-            except Exception:
-                pass
+                logger.debug(f"Convertida columna '{col}' a numerico")
+            except Exception as e:
+                logger.warning(f"No se pudo convertir columna '{col}': {e}")
 
     return df
 
@@ -106,14 +111,14 @@ def prepare_data(df: pd.DataFrame):
     y = df['target_temperature'].copy()
 
     # Convertir columnas con comas a numerico
-    print("Convirtiendo tipos de datos...")
+    logger.info("Convirtiendo tipos de datos...")
     X = convert_to_numeric(X)
 
     # Rellenar NaNs con 0
     X = X.fillna(0)
 
-    print(f"Features: {len(feature_cols)} columnas")
-    print(f"Target: target_temperature")
+    logger.info(f"Features: {len(feature_cols)} columnas")
+    logger.info(f"Target: target_temperature")
 
     return X, y
 
@@ -149,13 +154,13 @@ def train_model(X_train, y_train, params: dict = None):
     if params:
         default_params.update(params)
 
-    print("Entrenando modelo XGBoost...")
-    print(f"Parametros: {default_params}")
+    logger.info("Entrenando modelo XGBoost...")
+    logger.debug(f"Parametros: {default_params}")
 
     model = xgb.XGBRegressor(**default_params)
     model.fit(X_train, y_train)
 
-    print("Modelo entrenado correctamente")
+    logger.info("Modelo entrenado correctamente")
 
     return model
 
@@ -177,12 +182,12 @@ def evaluate_model(model, X_test, y_test) -> dict:
     rmse = np.sqrt(mean_squared_error(y_test, preds))
     r2 = r2_score(y_test, preds)
 
-    print("\n" + "=" * 40)
-    print("RESULTADOS DEL MODELO")
-    print("=" * 40)
-    print(f"RMSE (Error medio): {rmse:.2f} C")
-    print(f"R2 (Explicabilidad): {r2:.4f}")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("RESULTADOS DEL MODELO")
+    logger.info("=" * 40)
+    logger.info(f"RMSE (Error medio): {rmse:.2f} C")
+    logger.info(f"R2 (Explicabilidad): {r2:.4f}")
+    logger.info("=" * 40)
 
     return {
         'rmse': rmse,
@@ -212,7 +217,7 @@ def plot_predictions(y_test, predictions, output_path: Path = None):
 
     if output_path:
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        print(f"Grafico guardado en: {output_path}")
+        logger.info(f"Grafico guardado en: {output_path}")
 
     plt.show()
 
@@ -232,9 +237,9 @@ def plot_feature_importance(model, feature_names, top_n: int = 10, output_path: 
         'importance': model.feature_importances_
     }).sort_values('importance', ascending=False).head(top_n)
 
-    print(f"\nTOP {top_n} VARIABLES MAS INFLUYENTES:")
+    logger.info(f"TOP {top_n} VARIABLES MAS INFLUYENTES:")
     for _, row in importance.iterrows():
-        print(f"  {row['feature']}: {row['importance']:.4f}")
+        logger.info(f"  {row['feature']}: {row['importance']:.4f}")
 
     plt.figure(figsize=(10, 6))
     sns.barplot(x='importance', y='feature', data=importance, palette='viridis')
@@ -244,7 +249,7 @@ def plot_feature_importance(model, feature_names, top_n: int = 10, output_path: 
 
     if output_path:
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        print(f"Grafico guardado en: {output_path}")
+        logger.info(f"Grafico guardado en: {output_path}")
 
     plt.show()
 
@@ -258,12 +263,12 @@ def save_model_bentoml(model, model_name: str = "eaf_temperature_model"):
         model_name: Nombre para el modelo en BentoML
     """
     if not BENTOML_AVAILABLE:
-        print("BentoML no esta disponible. El modelo no se guardara en BentoML.")
+        logger.warning("BentoML no esta disponible. El modelo no se guardara en BentoML.")
         return None
 
-    print(f"\nGuardando modelo en BentoML como '{model_name}'...")
+    logger.info(f"Guardando modelo en BentoML como '{model_name}'...")
     saved_model = bentoml.xgboost.save_model(model_name, model)
-    print(f"Modelo guardado: {saved_model}")
+    logger.info(f"Modelo guardado: {saved_model}")
 
     return saved_model
 
@@ -300,9 +305,9 @@ def train_pipeline(
     # Crear directorio de modelos
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    print("=" * 50)
-    print("PIPELINE DE ENTRENAMIENTO")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("PIPELINE DE ENTRENAMIENTO")
+    logger.info("=" * 50)
 
     # 1. Cargar datos
     df = load_dataset(data_path)
@@ -314,8 +319,8 @@ def train_pipeline(
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
-    print(f"\nTrain: {len(X_train)} muestras")
-    print(f"Test: {len(X_test)} muestras")
+    logger.info(f"Train: {len(X_train)} muestras")
+    logger.info(f"Test: {len(X_test)} muestras")
 
     # 4. Entrenar modelo
     model = train_model(X_train, y_train)

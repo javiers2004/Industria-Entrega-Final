@@ -13,6 +13,7 @@ Targets disponibles: valc, valmn, valsi, valp, vals
 """
 import argparse
 from pathlib import Path
+from typing import Tuple, List, Dict, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,10 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from xgboost import XGBRegressor
@@ -72,7 +77,7 @@ def train_chemical_model(
     random_state = random_state or DEFAULT_HYPERPARAMS['random_state']
 
     # Cargar datos
-    print("Cargando datos...")
+    logger.info("Cargando datos...")
     df = load_and_clean_data()
 
     # Preparar features (excluyendo el target de los features)
@@ -85,8 +90,8 @@ def train_chemical_model(
     X = X[mask]
     y = y[mask]
 
-    print(f"Dataset: {len(X)} muestras, {len(feature_cols)} features")
-    print(f"Target: {target.upper()}")
+    logger.info(f"Dataset: {len(X)} muestras, {len(feature_cols)} features")
+    logger.info(f"Target: {target.upper()}")
 
     # Split train/test
     X_train, X_test, y_train, y_test = train_test_split(
@@ -94,7 +99,7 @@ def train_chemical_model(
     )
 
     # Crear modelo
-    print(f"Entrenando modelo: {MODEL_DISPLAY_NAMES.get(model_type, model_type)}")
+    logger.info(f"Entrenando modelo: {MODEL_DISPLAY_NAMES.get(model_type, model_type)}")
 
     if model_type == 'linear':
         model = LinearRegression()
@@ -125,14 +130,14 @@ def train_chemical_model(
     y_pred = model.predict(X_test)
     metrics = calculate_metrics(y_test, y_pred)
 
-    print(f"RMSE: {metrics['RMSE']:.6f}")
-    print(f"R2: {metrics['R2']:.4f}")
-    print(f"MAE: {metrics['MAE']:.6f}")
+    logger.info(f"RMSE: {metrics['RMSE']:.6f}")
+    logger.info(f"R2: {metrics['R2']:.4f}")
+    logger.info(f"MAE: {metrics['MAE']:.6f}")
 
     # Mostrar especificacion si existe
     if target in CHEMICAL_SPECS:
         min_spec, max_spec = CHEMICAL_SPECS[target]
-        print(f"Especificacion {target.upper()}: {min_spec} - {max_spec}")
+        logger.info(f"Especificacion {target.upper()}: {min_spec} - {max_spec}")
 
     return model, metrics, feature_cols, X_test, y_test, y_pred
 
@@ -152,7 +157,7 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
         plt.tight_layout()
         plt.savefig(output_dir / f'importancia_{target}.png', dpi=150)
         plt.close()
-        print(f"Guardado: {output_dir / f'importancia_{target}.png'}")
+        logger.info(f"Guardado: {output_dir / f'importancia_{target}.png'}")
 
     # Grafico de predicciones vs reales
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -167,7 +172,7 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
     plt.tight_layout()
     plt.savefig(output_dir / f'predicciones_{target}.png', dpi=150)
     plt.close()
-    print(f"Guardado: {output_dir / f'predicciones_{target}.png'}")
+    logger.info(f"Guardado: {output_dir / f'predicciones_{target}.png'}")
 
 
 def main():
@@ -221,9 +226,9 @@ def main():
     # Mapear 'rf' a 'random_forest'
     model_type = 'random_forest' if args.model == 'rf' else args.model
 
-    print("=" * 60)
-    print(f"ENTRENAMIENTO DE MODELO QUIMICO - {args.target.upper()}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info(f"ENTRENAMIENTO DE MODELO QUIMICO - {args.target.upper()}")
+    logger.info("=" * 60)
 
     # Entrenar modelo
     model, metrics, feature_names, X_test, y_test, y_pred = train_chemical_model(
@@ -239,9 +244,9 @@ def main():
         output_dir = get_project_root() / args.output_dir
         save_plots(model, feature_names, model_type, args.target, y_test, y_pred, output_dir)
 
-    print("=" * 60)
-    print("Entrenamiento completado!")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Entrenamiento completado!")
+    logger.info("=" * 60)
 
 
 if __name__ == '__main__':

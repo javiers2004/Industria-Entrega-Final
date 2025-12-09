@@ -5,20 +5,15 @@ import streamlit as st
 import pandas as pd
 import requests
 
-from src.config import INPUT_FEATURES, AVAILABLE_MODELS, MODEL_DISPLAY_NAMES, BENTOML_URL
+from src.config import (
+    INPUT_FEATURES, AVAILABLE_MODELS, MODEL_DISPLAY_NAMES,
+    BENTOML_URL, UI_MODEL_NAMES
+)
 from src.scripts.data_loader import get_data_path
 from src.scripts.evaluation import get_feature_importance
 from src.scripts.train_temperature import train_temperature_model, XGBOOST_AVAILABLE
 from components.visualizations import plot_feature_importance, plot_prediction_vs_real
 from components.indicators import temperature_quality_indicator
-
-
-# Mapeo inverso para UI
-UI_MODEL_NAMES = {
-    'Linear Regression': 'linear',
-    'Random Forest Regressor': 'random_forest',
-    'XGBoost Regressor': 'xgboost'
-}
 
 
 def render_temperature_tab(df: pd.DataFrame):
@@ -231,7 +226,22 @@ def _call_bentoml_prediction(inp_o2_lance, inp_gas_lance, inp_carbon,
         )
 
         if response.status_code == 200:
-            temp_pred = response.json()
+            # Validar y parsear respuesta JSON
+            try:
+                result = response.json()
+                # Manejar diferentes formatos de respuesta
+                if isinstance(result, (int, float)):
+                    temp_pred = float(result)
+                elif isinstance(result, dict) and 'prediction' in result:
+                    temp_pred = float(result['prediction'])
+                elif isinstance(result, list) and len(result) > 0:
+                    temp_pred = float(result[0])
+                else:
+                    st.error(f"Formato de respuesta inesperado: {type(result)}")
+                    return
+            except (ValueError, TypeError, KeyError) as e:
+                st.error(f"Error procesando respuesta del servidor: {e}")
+                return
 
             # Mostrar temperatura predicha
             st.metric(
@@ -256,9 +266,13 @@ def _call_bentoml_prediction(inp_o2_lance, inp_gas_lance, inp_carbon,
             st.markdown("- AMARILLO **Alta:** > 1650C (sobrecalentamiento)")
             st.markdown("- ROJO **Baja:** < 1580C (riesgo de reprocesamiento)")
         else:
-            st.error(f"Error del servidor: {response.text}")
+            st.error(f"Error del servidor (HTTP {response.status_code}): {response.text}")
 
+    except requests.exceptions.Timeout:
+        st.error("Timeout: El servidor BentoML tardo demasiado en responder. Intenta de nuevo.")
     except requests.exceptions.ConnectionError:
         st.error("No se pudo conectar con BentoML. Asegurate de que el servidor esta corriendo en localhost:3000")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error de red: {e}")
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error inesperado: {e}")

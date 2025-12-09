@@ -2,12 +2,18 @@
 Funciones para evaluacion de modelos y extraccion de metricas.
 Sin dependencias de Streamlit.
 """
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike
 from sklearn.metrics import mean_squared_error, r2_score
 
 
-def calculate_metrics(y_true, y_pred) -> dict:
+def calculate_metrics(
+    y_true: Union[np.ndarray, pd.Series, List[float]],
+    y_pred: Union[np.ndarray, pd.Series, List[float]]
+) -> Dict[str, float]:
     """
     Calcula metricas de evaluacion para regresion.
 
@@ -20,9 +26,12 @@ def calculate_metrics(y_true, y_pred) -> dict:
     --------
     dict con RMSE, R2, MAE
     """
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    r2 = r2_score(y_true, y_pred)
-    mae = np.mean(np.abs(y_true - y_pred))
+    y_true_arr = np.asarray(y_true)
+    y_pred_arr = np.asarray(y_pred)
+
+    rmse = float(np.sqrt(mean_squared_error(y_true_arr, y_pred_arr)))
+    r2 = float(r2_score(y_true_arr, y_pred_arr))
+    mae = float(np.mean(np.abs(y_true_arr - y_pred_arr)))
 
     return {
         'RMSE': rmse,
@@ -31,19 +40,24 @@ def calculate_metrics(y_true, y_pred) -> dict:
     }
 
 
-def get_feature_importance(model, feature_names: list, model_type: str) -> pd.DataFrame:
+def get_feature_importance(
+    model: Any,
+    feature_names: List[str],
+    model_type: str
+) -> Optional[pd.DataFrame]:
     """
     Obtiene la importancia de caracteristicas del modelo.
 
     Parameters:
     -----------
-    model : Modelo entrenado
+    model : Modelo entrenado (LinearRegression, RandomForest, XGBoost)
     feature_names : list - Nombres de las features
     model_type : str - Tipo de modelo ('xgboost', 'random_forest', 'linear')
 
     Returns:
     --------
-    DataFrame con columnas 'Feature' e 'Importance', ordenado ascendente por importancia
+    DataFrame con columnas 'Feature' e 'Importance', ordenado ascendente por importancia.
+    Retorna None si el tipo de modelo no es reconocido.
     """
     if model_type == 'linear':
         importance = np.abs(model.coef_)

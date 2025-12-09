@@ -1,10 +1,16 @@
 """
 Indicadores de calidad industrial.
 """
+from typing import Literal, Tuple
+
 from src.config import CHEMICAL_SPECS, TEMPERATURE_RANGES
 
+# Type aliases para mayor claridad
+IndicatorStatus = Literal['success', 'warning', 'error', 'info']
+IndicatorResult = Tuple[IndicatorStatus, str, str]
 
-def temperature_quality_indicator(temp: float) -> tuple:
+
+def temperature_quality_indicator(temp: float) -> IndicatorResult:
     """
     Genera indicador de calidad para temperatura.
 
@@ -14,7 +20,7 @@ def temperature_quality_indicator(temp: float) -> tuple:
 
     Returns:
     --------
-    tuple: (status, label, description)
+    Tuple[status, label, description]
         - status: 'success', 'warning', o 'error'
         - label: Etiqueta corta
         - description: Descripcion del estado
@@ -30,7 +36,7 @@ def temperature_quality_indicator(temp: float) -> tuple:
         return "error", "BAJA", "Riesgo de retraso / reprocesamiento"
 
 
-def chemical_spec_indicator(value: float, element: str) -> tuple:
+def chemical_spec_indicator(value: float, element: str) -> IndicatorResult:
     """
     Genera indicador de especificacion quimica.
 
@@ -41,7 +47,7 @@ def chemical_spec_indicator(value: float, element: str) -> tuple:
 
     Returns:
     --------
-    tuple: (status, label, description)
+    Tuple[status, label, description]
         - status: 'success', 'error', o 'info'
         - label: Etiqueta corta
         - description: Descripcion del estado

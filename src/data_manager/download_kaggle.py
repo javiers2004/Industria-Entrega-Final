@@ -12,8 +12,13 @@ Requisitos:
 import os
 import shutil
 from pathlib import Path
+from typing import List
 
 import kagglehub
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 # Archivos esperados del dataset
@@ -61,19 +66,19 @@ def download_data(force: bool = False) -> Path:
     archivos_existentes = [f for f in ARCHIVOS_ESPERADOS if (raw_data_dir / f).exists()]
 
     if len(archivos_existentes) == len(ARCHIVOS_ESPERADOS) and not force:
-        print(f"Los datos ya existen en {raw_data_dir}")
-        print("Usa force=True para volver a descargar.")
+        logger.info(f"Los datos ya existen en {raw_data_dir}")
+        logger.info("Usa force=True para volver a descargar.")
         return raw_data_dir
 
-    print(f"Descargando dataset desde Kaggle: {KAGGLE_DATASET}")
-    print("Esto puede tardar unos minutos...")
+    logger.info(f"Descargando dataset desde Kaggle: {KAGGLE_DATASET}")
+    logger.info("Esto puede tardar unos minutos...")
 
     # Descargar usando kagglehub
     kaggle_path = kagglehub.dataset_download(KAGGLE_DATASET)
     kaggle_path = Path(kaggle_path)
 
-    print(f"Dataset descargado en: {kaggle_path}")
-    print(f"Copiando archivos a: {raw_data_dir}")
+    logger.info(f"Dataset descargado en: {kaggle_path}")
+    logger.info(f"Copiando archivos a: {raw_data_dir}")
 
     # Copiar cada archivo al directorio del proyecto
     archivos_copiados = 0
@@ -86,19 +91,19 @@ def download_data(force: bool = False) -> Path:
         if origen.exists():
             shutil.copy2(origen, destino)
             size_mb = destino.stat().st_size / (1024 * 1024)
-            print(f"  - {archivo} ({size_mb:.2f} MB)")
+            logger.info(f"  - {archivo} ({size_mb:.2f} MB)")
             archivos_copiados += 1
         else:
             archivos_no_encontrados.append(archivo)
-            print(f"  - {archivo} (NO ENCONTRADO)")
+            logger.warning(f"  - {archivo} (NO ENCONTRADO)")
 
-    print("-" * 50)
-    print(f"Archivos copiados: {archivos_copiados}/{len(ARCHIVOS_ESPERADOS)}")
+    logger.info("-" * 50)
+    logger.info(f"Archivos copiados: {archivos_copiados}/{len(ARCHIVOS_ESPERADOS)}")
 
     if archivos_no_encontrados:
-        print(f"Archivos no encontrados: {archivos_no_encontrados}")
+        logger.warning(f"Archivos no encontrados: {archivos_no_encontrados}")
 
-    print(f"\nDatos guardados en: {raw_data_dir}")
+    logger.info(f"Datos guardados en: {raw_data_dir}")
 
     return raw_data_dir
 
@@ -114,8 +119,8 @@ def verificar_datos() -> bool:
     raw_data_dir = project_root / "data" / "raw"
 
     if not raw_data_dir.exists():
-        print(f"El directorio {raw_data_dir} no existe.")
-        print("Ejecuta download_data() para descargar los datos.")
+        logger.warning(f"El directorio {raw_data_dir} no existe.")
+        logger.info("Ejecuta download_data() para descargar los datos.")
         return False
 
     archivos_faltantes = []
@@ -124,12 +129,12 @@ def verificar_datos() -> bool:
             archivos_faltantes.append(archivo)
 
     if archivos_faltantes:
-        print(f"Faltan {len(archivos_faltantes)} archivos:")
+        logger.warning(f"Faltan {len(archivos_faltantes)} archivos:")
         for archivo in archivos_faltantes:
-            print(f"  - {archivo}")
+            logger.warning(f"  - {archivo}")
         return False
 
-    print(f"Todos los archivos ({len(ARCHIVOS_ESPERADOS)}) estan disponibles en {raw_data_dir}")
+    logger.info(f"Todos los archivos ({len(ARCHIVOS_ESPERADOS)}) estan disponibles en {raw_data_dir}")
     return True
 
 

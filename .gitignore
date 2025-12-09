@@ -1,5 +1,8 @@
 # Datos raw de Kaggle (descargados localmente)
-data/
+data/raw/
+
+*.pdf
+*.docx
 
 # Modelos serializados
 models/*.pkl

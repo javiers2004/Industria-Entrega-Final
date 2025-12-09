@@ -4,19 +4,13 @@ Tab 3: Prediccion de Composicion Quimica.
 import streamlit as st
 import pandas as pd
 
-from src.config import CHEMICAL_TARGETS, CHEMICAL_SPECS, INPUT_FEATURES
+from src.config import (
+    CHEMICAL_TARGETS, CHEMICAL_SPECS, INPUT_FEATURES, UI_MODEL_NAMES
+)
 from src.scripts.evaluation import get_feature_importance
 from src.scripts.train_chemical import train_chemical_model
 from components.visualizations import plot_feature_importance, plot_prediction_vs_real
 from components.indicators import chemical_spec_indicator
-
-
-# Mapeo inverso para UI
-UI_MODEL_NAMES = {
-    'Linear Regression': 'linear',
-    'Random Forest Regressor': 'random_forest',
-    'XGBoost Regressor': 'xgboost'
-}
 
 
 def render_chemical_tab(df: pd.DataFrame):
@@ -242,7 +236,7 @@ def _perform_chemical_prediction(inp_valc, inp_valmn, inp_valsi, inp_valp, inp_v
     features = st.session_state.chem_features
     target = st.session_state.chem_target
 
-    # Crear DataFrame de input
+    # Crear diccionario de input
     input_data = {
         'valc': inp_valc,
         'valmn': inp_valmn,
@@ -255,11 +249,9 @@ def _perform_chemical_prediction(inp_valc, inp_valmn, inp_valsi, inp_valp, inp_v
         'added_mat_360258': inp_chem_mat360258
     }
 
-    # Crear DataFrame con solo las features que el modelo necesita
-    input_df = pd.DataFrame(0.0, index=[0], columns=features)
-    for col in features:
-        if col in input_data:
-            input_df.at[0, col] = input_data[col]
+    # Crear DataFrame con solo las features que el modelo necesita (optimizado)
+    feature_values = {col: input_data.get(col, 0.0) for col in features}
+    input_df = pd.DataFrame([feature_values])
 
     # Realizar prediccion local
     try:
