@@ -2,6 +2,12 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+from pathlib import Path
+
+# Obtener la ruta al directorio del proyecto
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+DATA_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final_acero.csv"
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Predicción EAF - Grupo 13", layout="wide")
@@ -53,13 +59,12 @@ with col1:
 # --- LÓGICA DE PREDICCIÓN ---
 # Necesitamos cargar la estructura del dataset original para rellenar los huecos
 # (XGBoost necesita recibir TODAS las columnas, aunque sean 0)
-# --- LÓGICA DE PREDICCIÓN CORREGIDA ---
 try:
     # Leemos solo la cabecera para estructura
-    df_structure = pd.read_csv("dataset_final_acero.csv", nrows=1)
+    df_structure = pd.read_csv(DATA_PATH, nrows=1)
     feature_columns = [c for c in df_structure.columns if c not in ['heatid', 'target_temperature']]
 except:
-    st.error("⚠️ No encuentro 'dataset_final_acero.csv' para leer la estructura.")
+    st.error(f"⚠️ No encuentro el dataset en: {DATA_PATH}")
     feature_columns = []
 
 if st.button('🔥 CALCULAR TEMPERATURA FINAL'):

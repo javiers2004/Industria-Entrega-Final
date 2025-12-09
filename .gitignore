@@ -1,0 +1,33 @@
+# Datos raw de Kaggle (descargados localmente)
+data/
+
+# Modelos serializados
+models/*.pkl
+models/*.joblib
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Variables de entorno
+.env
+.env.local
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# BentoML
+bentoml/
