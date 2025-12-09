@@ -32,8 +32,8 @@ except ImportError:
     BENTOML_AVAILABLE = False
 
 from ..config import INPUT_FEATURES, DEFAULT_HYPERPARAMS, MODEL_DISPLAY_NAMES
-from ..utils.data_loader import load_and_clean_data, get_project_root
-from ..utils.evaluation import calculate_metrics, get_feature_importance
+from .data_loader import load_and_clean_data, get_project_root
+from .evaluation import calculate_metrics, get_feature_importance
 
 
 def train_temperature_model(

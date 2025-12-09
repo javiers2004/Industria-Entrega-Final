@@ -31,8 +31,8 @@ from ..config import (
     INPUT_FEATURES, CHEMICAL_TARGETS, DEFAULT_HYPERPARAMS,
     MODEL_DISPLAY_NAMES, CHEMICAL_SPECS
 )
-from ..utils.data_loader import load_and_clean_data, get_project_root
-from ..utils.evaluation import calculate_metrics, get_feature_importance
+from .data_loader import load_and_clean_data, get_project_root
+from .evaluation import calculate_metrics, get_feature_importance
 
 
 def train_chemical_model(

@@ -5,8 +5,8 @@ import streamlit as st
 import pandas as pd
 
 from src.config import CHEMICAL_TARGETS, CHEMICAL_SPECS, INPUT_FEATURES
-from src.utils.evaluation import get_feature_importance
-from src.models.train_chemical import train_chemical_model
+from src.scripts.evaluation import get_feature_importance
+from src.scripts.train_chemical import train_chemical_model
 from components.visualizations import plot_feature_importance, plot_prediction_vs_real
 from components.indicators import chemical_spec_indicator
 

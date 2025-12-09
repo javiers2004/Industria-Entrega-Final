@@ -2,7 +2,7 @@
 Wrapper con cache de Streamlit para carga de datos.
 """
 import streamlit as st
-from src.utils.data_loader import load_and_clean_data as _load_data, get_data_path
+from src.scripts.data_loader import load_and_clean_data as _load_data, get_data_path
 
 
 @st.cache_data

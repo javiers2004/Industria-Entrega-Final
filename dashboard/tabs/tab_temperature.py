@@ -6,9 +6,9 @@ import pandas as pd
 import requests
 
 from src.config import INPUT_FEATURES, AVAILABLE_MODELS, MODEL_DISPLAY_NAMES, BENTOML_URL
-from src.utils.data_loader import get_data_path
-from src.utils.evaluation import get_feature_importance
-from src.models.train_temperature import train_temperature_model, XGBOOST_AVAILABLE
+from src.scripts.data_loader import get_data_path
+from src.scripts.evaluation import get_feature_importance
+from src.scripts.train_temperature import train_temperature_model, XGBOOST_AVAILABLE
 from components.visualizations import plot_feature_importance, plot_prediction_vs_real
 from components.indicators import temperature_quality_indicator
 
