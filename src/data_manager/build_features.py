@@ -128,6 +128,28 @@ def pivot_materials(df_ladle: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
     return pivot_ladle
 
 
+def get_datetime_range(df_ladle: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extrae el rango de fechas (inicio y fin) de cada colada.
+
+    Args:
+        df_ladle: DataFrame con datos de ladle_tapping.csv
+
+    Returns:
+        DataFrame con heatid, fecha_inicio y fecha_fin
+    """
+    df_ladle = df_ladle.copy()
+    df_ladle['datetime'] = pd.to_datetime(df_ladle['datetime'], errors='coerce')
+
+    datetime_range = df_ladle.groupby('heatid').agg({
+        'datetime': ['min', 'max']
+    })
+    datetime_range.columns = ['fecha_inicio', 'fecha_fin']
+    datetime_range = datetime_range.reset_index()
+
+    return datetime_range
+
+
 def get_final_chemical_composition(df_chem_final: pd.DataFrame) -> pd.DataFrame:
     """
     Obtiene la composicion quimica final de cada colada.
@@ -227,6 +249,9 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     logger.info("Pivotando materiales...")
     pivot_ladle = pivot_materials(df_ladle)
 
+    logger.info("Extrayendo rango de fechas...")
+    datetime_range = get_datetime_range(df_ladle)
+
     logger.info("Fusionando dataset maestro...")
 
     # Dataset base: mediciones quimicas iniciales
@@ -236,6 +261,7 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     df_master = df_master.merge(grp_gas, on='heatid', how='left')
     df_master = df_master.merge(grp_inj, on='heatid', how='left')
     df_master = df_master.merge(pivot_ladle, on='heatid', how='left')
+    df_master = df_master.merge(datetime_range, on='heatid', how='left')
 
     # Rellenar nulos tecnicos
     cols_to_fix = ['total_o2_lance', 'total_gas_lance', 'total_injected_carbon']

@@ -14,7 +14,7 @@ Uso:
     python -m src.models.train_model
 
 Requisitos:
-    - Dataset procesado en data/processed/dataset_final_acero.csv
+    - Dataset procesado en data/processed/dataset_final_temp.csv
     - Ejecutar primero: python -m src.features.build_features
     - En Mac: brew install libomp (para XGBoost)
 """
@@ -292,7 +292,7 @@ def train_pipeline(
         Diccionario con modelo, metricas y paths
     """
     project_root = get_project_root()
-    data_path = project_root / "data" / "processed" / "dataset_final_acero.csv"
+    data_path = project_root / "data" / "processed" / "dataset_final_temp.csv"
     models_dir = project_root / "models"
 
     # Verificar que existe el dataset

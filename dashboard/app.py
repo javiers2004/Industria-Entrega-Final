@@ -71,7 +71,7 @@ def main():
     ])
 
     with tab1:
-        render_eda_tab(df)
+        render_eda_tab()
 
     with tab2:
         render_temperature_tab(df)
