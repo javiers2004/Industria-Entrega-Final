@@ -19,28 +19,31 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def get_data_path() -> Path:
+def get_data_path(file_name: str = "dataset_final_temp.csv") -> Path:
     """
     Busca el archivo de datos usando multiples estrategias.
 
+    Parameters:
+        file_name: Nombre del archivo CSV (default: dataset_final_temp.csv)
+
     Returns:
-        Path al archivo dataset_final_acero.csv
+        Path al archivo de datos
     """
     # Estrategia 1: Relativo al proyecto
     PROJECT_ROOT = get_project_root()
-    DATA_PATH = PROJECT_ROOT / "data" / "processed" / "dataset_final_acero.csv"
+    DATA_PATH = PROJECT_ROOT / "data" / "processed" / file_name
 
     if DATA_PATH.exists():
         return DATA_PATH
 
     # Estrategia 2: Desde working directory
-    ALT_DATA_PATH = Path(os.getcwd()) / "data" / "processed" / "dataset_final_acero.csv"
+    ALT_DATA_PATH = Path(os.getcwd()) / "data" / "processed" / file_name
     if ALT_DATA_PATH.exists():
         return ALT_DATA_PATH
 
     # Estrategia 3: Buscar en padres del working directory
     for parent in Path(os.getcwd()).parents:
-        candidate = parent / "data" / "processed" / "dataset_final_acero.csv"
+        candidate = parent / "data" / "processed" / file_name
         if candidate.exists():
             return candidate
 
