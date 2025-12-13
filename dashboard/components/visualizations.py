@@ -4,6 +4,7 @@ Funciones de visualizacion con Plotly.
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from typing import Optional, Tuple
 
 
 def plot_feature_importance(importance_df: pd.DataFrame, title: str = "Importancia de Variables"):
@@ -72,6 +73,72 @@ def plot_prediction_vs_real(y_test, y_pred, title: str = "Prediccion vs Real"):
         xaxis_title='Valor Real',
         yaxis_title='Valor Predicho',
         height=400
+    )
+
+    return fig
+
+
+def plot_distribution(y_test: pd.Series, y_pred: pd.Series, spec_range: Optional[Tuple[float, float]] = None, title: str = "Distribución de Valores (Real vs Predicho)"):
+    """
+    Genera un histograma superpuesto (con densidad) de valores reales y predichos.
+
+    Parameters:
+    -----------
+    y_test : array-like - Valores reales
+    y_pred : array-like - Valores predichos
+    spec_range : tuple (min, max) - Rango de especificacion para sombrear
+    title : str - Titulo del grafico
+
+    Returns:
+    --------
+    plotly Figure
+    """
+    # Combinar datos en un DataFrame para Plotly Express
+    df_plot = pd.DataFrame({
+        'Valor': pd.concat([pd.Series(y_test), pd.Series(y_pred)]),
+        'Tipo': ['Real'] * len(y_test) + ['Predicho'] * len(y_pred)
+    })
+
+    # Crear histograma superpuesto (usando densidad de probabilidad)
+    fig = px.histogram(
+        df_plot,
+        x="Valor",
+        color="Tipo",
+        marginal="box",
+        barmode="overlay",
+        histnorm='probability density',
+        opacity=0.6,
+        color_discrete_map={
+            'Real': 'red',
+            'Predicho': 'blue'
+        }
+    )
+
+    # Añadir área sombreada para la especificación
+    if spec_range and len(spec_range) == 2 and all(v is not None for v in spec_range):
+        spec_min, spec_max = spec_range
+
+        # Sombreado para la zona de especificación
+        fig.add_vrect(
+            x0=spec_min,
+            x1=spec_max,
+            fillcolor="green",
+            opacity=0.1,
+            layer="below",
+            line_width=0,
+            name="Especificación"
+        )
+
+        # Línea para el límite mínimo de especificación
+        fig.add_vline(x=spec_min, line_width=1, line_dash="dash", line_color="green", name="Mín. Espec.")
+
+        # Línea para el límite máximo de especificación
+        fig.add_vline(x=spec_max, line_width=1, line_dash="dash", line_color="green", name="Máx. Espec.")
+
+    fig.update_layout(
+        title=title,
+        height=400,
+        yaxis_title="Densidad de Probabilidad"
     )
 
     return fig
