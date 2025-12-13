@@ -8,56 +8,13 @@ import numpy as np
 # Importaciones asumidas del proyecto
 from src.config import CHEMICAL_TARGETS, CHEMICAL_SPECS
 from components.visualizations import plot_prediction_vs_real, plot_feature_importance
-# NOTA: Se asume que se importa la funcion load_chemical_results (implementada abajo para simular)
-# from dashboard.utils.cached_loader import load_chemical_results
+# ACTUALIZACIÓN: Importar la función real de carga del .pkl
+from dashboard.utils.cached_loader import load_single_chemical_result
 
 
-# --- FUNCION DE CARGA DUMMY (DEBE SER REEMPLAZADA) ---
-# Esta funcion simula la carga usando los targets y rangos reales, pero con datos aleatorios.
-# DEBE ser reemplazada por la lógica real de carga de resultados pre-calculados.
-def load_chemical_results():
-    """Simula la carga de resultados del modelo de composicion quimica (Usando targets reales)."""
-    st.info("🚨 ADVERTENCIA: Usando datos de modelo simulados para targets químicos.")
+# --- FUNCIONES DE CARGA DUMMY ELIMINADAS ---
+# La funcion load_chemical_results (la que generaba datos aleatorios) ha sido ELIMINADA.
 
-    results = {}
-
-    # Usar los targets reales definidos en src.config
-    targets_to_simulate = CHEMICAL_TARGETS
-
-    for target in targets_to_simulate:
-        # Generar datos simulados para y_test y y_pred (simulando variabilidad real)
-        np.random.seed(hash(target) % 1000) # Semilla diferente por target
-        n_samples = 100
-
-        # Usar el rango de especificacion para simular valores reales cercanos
-        spec_min, spec_max = CHEMICAL_SPECS.get(target, (0, 1))
-
-        # Simular y_test dentro de un rango cercano a las especificaciones
-        y_test = np.random.uniform(spec_min, spec_max, n_samples)
-        # y_pred simula una prediccion con ruido bajo
-        y_pred = y_test + np.random.normal(0, (spec_max - spec_min) * 0.05, n_samples)
-
-        # Simular feature importance (estructura requerida por plot_feature_importance)
-        features = [
-            'total_o2_lance', 'total_gas_lance', 'valc_init', 'added_mat_140107',
-            'added_mat_202007', 'added_mat_360258'
-        ]
-        importance = np.random.uniform(0.01, 0.5, len(features))
-        importance_df = pd.DataFrame({'Feature': features, 'Importance': importance})
-        importance_df = importance_df.sort_values('Importance', ascending=True)
-
-        # Simular métricas (calculadas a partir de los datos simulados)
-        mae = np.mean(np.abs(y_test - y_pred))
-        r2 = 1 - np.sum((y_test - y_pred)**2) / np.sum((y_test - np.mean(y_test))**2)
-
-        results[target] = {
-            'y_test': pd.Series(y_test),
-            'y_pred': pd.Series(y_pred),
-            'importance_df': importance_df,
-            'metrics': {'MAE': mae, 'R2': r2}
-        }
-
-    return results
 
 # --- FUNCIONES DE RENDERIZADO DEL TAB ---
 
@@ -135,7 +92,8 @@ def _render_prediction_analysis(target_data: dict, target_name: str):
         y_pred,
         title=f"Prediccion vs Real para {target_name.upper()}"
     )
-    st.plotly_chart(fig_pred, use_container_width=True)
+    # Corrección: Usar width='stretch' en lugar de use_container_width=True
+    st.plotly_chart(fig_pred, width='stretch')
 
 
 def _render_feature_importance(target_data: dict, target_name: str):
@@ -153,7 +111,8 @@ def _render_feature_importance(target_data: dict, target_name: str):
         importance_df,
         title=f"Importancia de Variables para {target_name.upper()}"
     )
-    st.plotly_chart(fig_imp, use_container_width=True)
+    # Corrección: Usar width='stretch' en lugar de use_container_width=True
+    st.plotly_chart(fig_imp, width='stretch')
 
 
 def render_chemical_tab():
@@ -163,12 +122,24 @@ def render_chemical_tab():
     st.title("🧪 Predicción de Composición Química")
     st.markdown("Esta sección presenta el análisis de los resultados de los modelos entrenados para predecir la composición química (elementos como **C, Mn, Si, P, S**).")
 
-    # 1. Cargar Resultados (Usando la funcion dummy/simulada que debe ser reemplazada)
-    results = load_chemical_results()
+    # 1. Cargar Resultados (Lógica de carga de datos REALES)
+    st.info("Cargando resultados de modelos químicos pre-calculados...")
 
-    if not results:
-        st.error("No se pudieron cargar los resultados del modelo químico. Verifique la implementación de la función de carga.")
+    all_results = {}
+    # Iterar sobre los targets definidos en src/config.py
+    for target in CHEMICAL_TARGETS:
+        # Usar la funcion cacheada para cargar los resultados de cada target
+        result = load_single_chemical_result(target)
+        if result:
+            all_results[target] = result
+
+    # COMPROBACIÓN CRÍTICA: Si no hay resultados, mostrar error y salir.
+    if not all_results:
+        st.error("🚨 ERROR: No se pudieron cargar los resultados de ningún modelo químico.")
+        st.warning("Verifique que haya ejecutado los scripts de entrenamiento (ej: `python -m src.scripts.train_chemical --target valc`) y que los archivos de resultados (`results_*.pkl`) existan en `models/chemical_results/`.")
         return
+
+    results = all_results # Usamos 'results' para mantener la compatibilidad con el resto de la función
 
     # 2. Resumen de Métricas Globales
     _render_summary_metrics(results)
@@ -196,4 +167,5 @@ def render_chemical_tab():
             st.divider()
             _render_feature_importance(target_data, selected_target)
         else:
+            # Esto solo debería ocurrir si un target se carga en la lista, pero luego falla
             st.error(f"Error al obtener los datos para el target: {selected_target}")

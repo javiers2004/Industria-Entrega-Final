@@ -12,7 +12,8 @@ Ejemplos:
 Targets disponibles: valc, valmn, valsi, valp, vals
 """
 import argparse
-import json # Importacion nueva para guardar las metricas
+import json
+import pickle # <-- NUEVA IMPORTACIÓN
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 
@@ -151,9 +152,32 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
     chemical_results_dir = output_dir / "chemical_results"
     chemical_results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Grafico de importancia de variables
+    # Calcular métricas y feature importance una vez
+    metrics = calculate_metrics(y_test, y_pred)
     importance_df = get_feature_importance(model, feature_names, model_type)
+
+    # --- Seccion de Guardado del Archivo Único .pkl para el Dashboard (NUEVO) ---
     if importance_df is not None:
+        results_data = {
+            'y_test': y_test,
+            'y_pred': y_pred,
+            'importance_df': importance_df,
+            'metrics': metrics
+        }
+        results_file = chemical_results_dir / f"results_{target}.pkl"
+        try:
+            with open(results_file, 'wb') as f:
+                pickle.dump(results_data, f)
+            logger.info(f"Guardado: {results_file} (Archivo único para Dashboard)")
+        except Exception as e:
+            logger.error(f"Error al guardar el archivo .pkl para '{target}': {e}")
+    else:
+        logger.warning(f"No se pudo calcular feature importance para guardar el archivo .pkl para '{target}'.")
+    # -----------------------------------------------------------------------------
+
+
+    # Grafico de importancia de variables
+    if importance_df is not None: # Ya calculado arriba
         fig, ax = plt.subplots(figsize=(10, 8))
         top_features = importance_df.tail(15)
         ax.barh(top_features['Feature'], top_features['Importance'], color='steelblue')
@@ -164,7 +188,7 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
         plt.close()
         logger.info(f"Guardado: {output_dir / f'importancia_{target}.png'}")
 
-        # Guardar Importancia de Variables para el dashboard
+        # Guardar Importancia de Variables para el dashboard (CSV - Original)
         importance_path = chemical_results_dir / f'{target}_importance.csv'
         importance_df.to_csv(importance_path, index=False)
         logger.info(f"Guardado: {importance_path}")
@@ -184,14 +208,13 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
     plt.close()
     logger.info(f"Guardado: {output_dir / f'predicciones_{target}.png'}")
 
-    # Guardar Predicciones (y_test y y_pred) para el dashboard
+    # Guardar Predicciones (y_test y y_pred) para el dashboard (CSV - Original)
     df_preds = pd.DataFrame({'y_test': y_test, 'y_pred': y_pred})
     preds_path = chemical_results_dir / f'{target}_predictions.csv'
     df_preds.to_csv(preds_path, index=False)
     logger.info(f"Guardado: {preds_path}")
 
-    # Guardar Métricas para el dashboard
-    metrics = calculate_metrics(y_test, y_pred)
+    # Guardar Métricas para el dashboard (JSON - Original)
     metrics_path = chemical_results_dir / f'{target}_metrics.json'
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=4)
