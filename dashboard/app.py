@@ -5,6 +5,7 @@ Punto de entrada principal de la aplicacion Streamlit.
 Ejecutar con: streamlit run dashboard/app.py
 """
 import sys
+import atexit
 from pathlib import Path
 
 # Añadir raiz del proyecto al path para poder importar src/
@@ -23,6 +24,10 @@ from utils.cached_loader import load_and_clean_data
 from tabs.tab_eda import render_eda_tab
 from tabs.tab_temperature import render_temperature_tab
 from tabs.tab_chemical import render_chemical_tab
+from tabs.tab_inference import render_inference_tab, cleanup_bentoml_service
+
+# Registrar cleanup de BentoML al cerrar la aplicacion
+atexit.register(cleanup_bentoml_service)
 
 
 # Configuracion de pagina (debe ser lo primero)
@@ -42,7 +47,10 @@ def init_session_state():
         'chem_model': None,
         'chem_features': None,
         'chem_target': None,
-        'chem_model_type': None
+        'chem_model_type': None,
+        # Variables para inferencia BentoML
+        'bentoml_pid': None,
+        'current_bentoml_model': None
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -64,10 +72,11 @@ def main():
         st.stop()
 
     # Tabs principales
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "EDA y Resumen del Dataset",
         "Tarea 1: Prediccion de Temperatura",
-        "Tarea 2: Prediccion de Composicion Quimica"
+        "Tarea 2: Prediccion de Composicion Quimica",
+        "Inferencia en Tiempo Real"
     ])
 
     with tab1:
@@ -78,6 +87,9 @@ def main():
 
     with tab3:
         render_chemical_tab()
+
+    with tab4:
+        render_inference_tab()
 
     # Footer
     st.divider()
