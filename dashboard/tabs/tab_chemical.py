@@ -306,13 +306,54 @@ def _render_model_evaluation(model_name: str):
                 st.error(f"Features faltantes en el dataset: {missing_features}")
                 return
 
-            X = df[model_features]
-            y = df[target]
+            X = df[model_features].copy()
+            y = df[target].copy()
 
-            # Eliminar nulos
-            mask = ~(X.isnull().any(axis=1) | y.isnull())
-            X = X[mask]
-            y = y[mask]
+            # =========================================================================
+            # FIX APLICADO: REPLICACIÓN EXACTA DEL PRE-PROCESAMIENTO DEL ENTRENAMIENTO
+            # Esto garantiza que X e Y sean idénticos al momento del split original.
+            # (Basado en dashboard/utils/chemical_engine.py)
+            # =========================================================================
+
+            # 1. Eliminar filas donde el target es nulo (siempre obligatorio)
+            mask_target = y.notnull()
+            X = X[mask_target]
+            y = y[mask_target]
+
+            # 2. Capping del Target (y) para eliminar Outliers extremos (5%/95% cuantil)
+            if len(y) > 100 and y.dtype in [np.float64, np.float32]:
+                try:
+                    # Usamos 5% y 95%
+                    lower_bound = y.quantile(0.05)
+                    upper_bound = y.quantile(0.95)
+
+                    outlier_mask = (y >= lower_bound) & (y <= upper_bound)
+
+                    # Aplicar el filtro a X y a y
+                    X = X.loc[outlier_mask]
+                    y = y.loc[outlier_mask]
+
+                except Exception:
+                    # Si falla el capping, se ignora y se procede.
+                    pass
+
+            # 3. Imputación de NaNs en features: reemplazar nulos por 0
+            X = X.fillna(0)
+
+            # 4. Limpieza final de valores infinitos
+            X = X.replace([np.inf, -np.inf], 0)
+            y = y.replace([np.inf, -np.inf], np.nan).dropna()
+
+            # 5. Asegurar alineación final
+            X = X.loc[y.index]
+
+            if len(X) == 0:
+                 st.error("El dataset de evaluación quedó vacío después de la limpieza. No se puede evaluar.")
+                 return
+
+            # =========================================================================
+            # FIN DEL FIX
+            # =========================================================================
 
             # Recrear split
             test_size = DEFAULT_HYPERPARAMS['test_size']
@@ -322,6 +363,7 @@ def _render_model_evaluation(model_name: str):
                 test_size = metadata['hyperparameters'].get('test_size', test_size)
                 random_state = metadata['hyperparameters'].get('random_state', random_state)
 
+            # Ahora el split se aplica a un conjunto de datos idéntico al usado en el entrenamiento
             _, X_test, _, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=random_state
             )
@@ -336,6 +378,7 @@ def _render_model_evaluation(model_name: str):
             st.markdown("##### Metricas de Evaluacion")
             m1, m2, m3, m4 = st.columns(4)
             with m1:
+                # Al recalcular aquí, el valor debe coincidir con el guardado en metadata
                 metrics = calculate_metrics(y_test, y_pred)
                 st.metric("RMSE", f"{metrics['RMSE']:.6f}")
             with m2:
