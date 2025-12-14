@@ -57,22 +57,31 @@ def aggregate_gas_data(df_gas: pd.DataFrame) -> pd.DataFrame:
     """
     Agrega los datos de gas lance por colada.
 
+    Obtiene el ultimo valor registrado temporalmente (por revtime) de cada colada.
+
     Args:
         df_gas: DataFrame con datos de eaf_gaslance_mat.csv
 
     Returns:
-        DataFrame agregado por heatid con totales de O2 y gas
+        DataFrame agregado por heatid con el ultimo valor de O2 y gas
     """
-    # Limpiar tipos
+    df = df_gas.copy()
+
+    # Convertir a numerico
     cols_gas = ['o2_amount', 'gas_amount']
     for col in cols_gas:
-        df_gas[col] = pd.to_numeric(df_gas[col], errors='coerce')
+        df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # Agregar por colada (sumatorio)
-    grp_gas = df_gas.groupby('heatid').agg({
-        'o2_amount': 'sum',
-        'gas_amount': 'sum'
-    }).rename(columns={
+    # Convertir tiempo (formato: "2016-01-01 18:31:46,003")
+    df['revtime'] = pd.to_datetime(
+        df['revtime'].astype(str).str.replace(',', '.', regex=False),
+        format='%Y-%m-%d %H:%M:%S.%f',
+        errors='coerce'
+    )
+
+    # Ordenar por tiempo y obtener el ultimo registro por colada
+    df = df.sort_values('revtime')
+    grp_gas = df.groupby('heatid').last()[cols_gas].rename(columns={
         'o2_amount': 'total_o2_lance',
         'gas_amount': 'total_gas_lance'
     })
@@ -94,7 +103,13 @@ def aggregate_injection_data(df_inj: pd.DataFrame) -> pd.DataFrame:
     """
     df = df_inj.copy()
     df['inj_amount_carbon'] = pd.to_numeric(df['inj_amount_carbon'], errors='coerce')
-    df['revtime'] = pd.to_datetime(df['revtime'], errors='coerce')
+
+    # Convertir tiempo (formato: "2016-01-01 18:31:46,003")
+    df['revtime'] = pd.to_datetime(
+        df['revtime'].astype(str).str.replace(',', '.', regex=False),
+        format='%Y-%m-%d %H:%M:%S.%f',
+        errors='coerce'
+    )
 
     # Ordenar por tiempo y obtener el ultimo registro por colada
     df = df.sort_values('revtime')
