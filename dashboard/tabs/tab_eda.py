@@ -25,44 +25,55 @@ DATASET_OPTIONS = {
 def render_eda_tab():
     """
     Renderiza el tab de Analisis Exploratorio de Datos.
-    Incluye selector de dataset y multiples subsecciones de analisis.
+    Muestra el analisis completo para ambos datasets (Temperatura y Quimica)
+    de forma secuencial en la misma pagina.
     """
     st.header("Analisis Exploratorio de Datos (EDA)")
 
-    # Selector de dataset
-    st.subheader("Seleccion de Dataset")
-    selected_dataset = st.selectbox(
-        "Selecciona el dataset a analizar:",
-        options=list(DATASET_OPTIONS.keys()),
-        key='eda_dataset_selector'
-    )
+    # =========================================================================
+    # SECCION 1: TEMPERATURA
+    # =========================================================================
+    st.header("1- Analisis de datos relacionado con temperatura")
 
-    # Cargar el dataset seleccionado
-    file_name = DATASET_OPTIONS[selected_dataset]
-    df = load_data_for_eda(file_name)
+    # Cargar dataset de temperatura
+    df_temp = load_data_for_eda(DATASET_OPTIONS["Temperatura"])
 
-    # Validar que el DataFrame se cargo correctamente
-    if df is None or df.empty:
-        st.error(f"No se pudo cargar el dataset: {file_name}")
-        return
+    if df_temp is None or df_temp.empty:
+        st.error(f"No se pudo cargar el dataset: {DATASET_OPTIONS['Temperatura']}")
+    else:
+        st.success("Dataset de Temperatura cargado correctamente.")
 
-    st.success(f"Dataset '{selected_dataset}' cargado correctamente.")
+        # Renderizar subsecciones de EDA para Temperatura
+        _render_summary_metrics(df_temp)
+        _render_correlation_analysis(df_temp, "Temperatura", key_suffix="temp")
+        _render_distribution_analysis(df_temp, key_suffix="temp")
+        _render_univariate_advanced(df_temp, key_suffix="temp")
+        _render_multivariate_analysis(df_temp)
 
-    # Renderizar subsecciones de EDA
-    st.divider()
-    _render_summary_metrics(df)
+    # =========================================================================
+    # SEPARADOR ENTRE SECCIONES
+    # =========================================================================
+    st.markdown("---")
 
-    st.divider()
-    _render_correlation_analysis(df, selected_dataset)
+    # =========================================================================
+    # SECCION 2: QUIMICA
+    # =========================================================================
+    st.header("2- Analisis de datos relacionados con la composicion quimica")
 
-    st.divider()
-    _render_distribution_analysis(df)
+    # Cargar dataset de quimica
+    df_chem = load_data_for_eda(DATASET_OPTIONS["Quimica"])
 
-    st.divider()
-    _render_univariate_advanced(df)
+    if df_chem is None or df_chem.empty:
+        st.error(f"No se pudo cargar el dataset: {DATASET_OPTIONS['Quimica']}")
+    else:
+        st.success("Dataset de Quimica cargado correctamente.")
 
-    st.divider()
-    _render_multivariate_analysis(df)
+        # Renderizar subsecciones de EDA para Quimica
+        _render_summary_metrics(df_chem)
+        _render_correlation_analysis(df_chem, "Quimica", key_suffix="chem")
+        _render_distribution_analysis(df_chem, key_suffix="chem")
+        _render_univariate_advanced(df_chem, key_suffix="chem")
+        _render_multivariate_analysis(df_chem)
 
 
 def _render_summary_metrics(df: pd.DataFrame):
@@ -84,7 +95,7 @@ def _render_summary_metrics(df: pd.DataFrame):
     st.dataframe(df.describe().T, use_container_width=True)
 
 
-def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str):
+def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str, key_suffix: str = ""):
     """2. Renderiza analisis de correlaciones con variable objetivo."""
     st.subheader("2. Correlaciones con Variable Objetivo")
 
@@ -99,11 +110,17 @@ def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str):
         st.warning("No se encontraron variables objetivo en el dataset seleccionado.")
         return
 
-    selected_corr_target = st.selectbox(
-        "Selecciona la Variable Objetivo de Correlacion:",
-        options=available_targets,
-        key='corr_target'
-    )
+    if len(available_targets) == 1:
+        # Solo hay una variable objetivo, usarla directamente sin selector
+        selected_corr_target = available_targets[0]
+        st.info(f"Variable objetivo: **{selected_corr_target}**")
+    else:
+        # Multiples variables objetivo, mostrar selector
+        selected_corr_target = st.selectbox(
+            "Selecciona la Variable Objetivo de Correlacion:",
+            options=available_targets,
+            key=f'corr_target_{key_suffix}'
+        )
 
     # Calcular correlaciones
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -120,7 +137,7 @@ def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str):
         st.warning(f"La variable '{selected_corr_target}' no es numerica o no existe en el dataset.")
 
 
-def _render_distribution_analysis(df: pd.DataFrame):
+def _render_distribution_analysis(df: pd.DataFrame, key_suffix: str = ""):
     """3. Renderiza analisis de distribuciones con histograma."""
     st.subheader("3. Distribuciones - Histograma")
 
@@ -142,7 +159,7 @@ def _render_distribution_analysis(df: pd.DataFrame):
         selected_hist_var = st.selectbox(
             "Selecciona una Variable:",
             options=numeric_cols,
-            key='hist_var'
+            key=f'hist_var_{key_suffix}'
         )
     with col2:
         # Preseleccionar fecha_inicio si existe
@@ -151,7 +168,7 @@ def _render_distribution_analysis(df: pd.DataFrame):
             "Selecciona Fecha:",
             options=available_dates,
             index=default_date_idx,
-            key='hist_date'
+            key=f'hist_date_{key_suffix}'
         ) if available_dates else None
 
     # Mostrar grafico segun seleccion
@@ -180,7 +197,7 @@ def _render_distribution_analysis(df: pd.DataFrame):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_univariate_advanced(df: pd.DataFrame):
+def _render_univariate_advanced(df: pd.DataFrame, key_suffix: str = ""):
     """4. Renderiza analisis univariado avanzado con Box Plot."""
     st.subheader("4. Univariado Avanzado - Box Plot")
 
@@ -194,7 +211,7 @@ def _render_univariate_advanced(df: pd.DataFrame):
     selected_box_var = st.selectbox(
         "Selecciona una Variable para el Box Plot:",
         options=numeric_cols,
-        key='box_var'
+        key=f'box_var_{key_suffix}'
     )
 
     if selected_box_var:
