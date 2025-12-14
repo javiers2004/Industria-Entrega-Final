@@ -68,10 +68,10 @@ def aggregate_gas_data(df_gas: pd.DataFrame) -> pd.DataFrame:
     for col in cols_gas:
         df_gas[col] = pd.to_numeric(df_gas[col], errors='coerce')
 
-    # Agregar por colada
+    # Agregar por colada (sumatorio)
     grp_gas = df_gas.groupby('heatid').agg({
-        'o2_amount': 'max',
-        'gas_amount': 'max'
+        'o2_amount': 'sum',
+        'gas_amount': 'sum'
     }).rename(columns={
         'o2_amount': 'total_o2_lance',
         'gas_amount': 'total_gas_lance'
@@ -84,19 +84,90 @@ def aggregate_injection_data(df_inj: pd.DataFrame) -> pd.DataFrame:
     """
     Agrega los datos de inyecciones de carbon por colada.
 
+    Obtiene el ultimo valor registrado temporalmente (por revtime) de cada colada.
+
     Args:
         df_inj: DataFrame con datos de inj_mat.csv
 
     Returns:
-        DataFrame agregado por heatid con total de carbon inyectado
+        DataFrame agregado por heatid con el ultimo valor de carbon inyectado
     """
-    df_inj['inj_amount_carbon'] = pd.to_numeric(df_inj['inj_amount_carbon'], errors='coerce')
+    df = df_inj.copy()
+    df['inj_amount_carbon'] = pd.to_numeric(df['inj_amount_carbon'], errors='coerce')
+    df['revtime'] = pd.to_datetime(df['revtime'], errors='coerce')
 
-    grp_inj = df_inj.groupby('heatid').agg({
-        'inj_amount_carbon': 'max'
-    }).rename(columns={'inj_amount_carbon': 'total_injected_carbon'})
+    # Ordenar por tiempo y obtener el ultimo registro por colada
+    df = df.sort_values('revtime')
+    grp_inj = df.groupby('heatid').last()[['inj_amount_carbon']].rename(
+        columns={'inj_amount_carbon': 'total_injected_carbon'}
+    )
 
     return grp_inj
+
+
+def aggregate_transformer_data(df_transformer: pd.DataFrame) -> pd.DataFrame:
+    """
+    Agrega los datos del transformador por colada.
+
+    Args:
+        df_transformer: DataFrame con datos de eaf_transformer.csv
+
+    Returns:
+        DataFrame agregado por heatid con total_energy y total_duration
+    """
+    df = df_transformer.copy()
+
+    # Parsear DURATION de formato "MM: SS" a minutos decimales
+    def parse_duration(duration_str):
+        try:
+            duration_str = str(duration_str).strip()
+            parts = duration_str.split(':')
+            if len(parts) == 2:
+                minutes = float(parts[0].strip())
+                seconds = float(parts[1].strip())
+                return minutes + seconds / 60.0
+            return 0.0
+        except (ValueError, AttributeError):
+            return 0.0
+
+    df['duration_minutes'] = df['duration'].apply(parse_duration)
+
+    # Convertir MW a numerico
+    df['mw'] = pd.to_numeric(df['mw'], errors='coerce').fillna(0)
+
+    # Calcular energia = MW * duracion (en minutos)
+    df['energy'] = df['mw'] * df['duration_minutes']
+
+    # Agregar por colada
+    grp_transformer = df.groupby('heatid').agg({
+        'energy': 'sum',
+        'duration_minutes': 'sum'
+    }).rename(columns={
+        'energy': 'total_energy',
+        'duration_minutes': 'total_duration'
+    })
+
+    return grp_transformer
+
+
+def aggregate_charged_amount(df_ladle: pd.DataFrame) -> pd.DataFrame:
+    """
+    Agrega la cantidad total cargada por colada.
+
+    Args:
+        df_ladle: DataFrame con datos de ladle_tapping.csv
+
+    Returns:
+        DataFrame agregado por heatid con total_charged_amount
+    """
+    df = df_ladle.copy()
+    df['charge_amount'] = pd.to_numeric(df['charge_amount'], errors='coerce').fillna(0)
+
+    grp_charged = df.groupby('heatid').agg({
+        'charge_amount': 'sum'
+    }).rename(columns={'charge_amount': 'total_charged_amount'})
+
+    return grp_charged
 
 
 def pivot_materials(df_ladle: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
@@ -239,12 +310,15 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     df_inj = load_standardized(raw_data_dir / "inj_mat.csv")
     df_ladle = load_standardized(raw_data_dir / "ladle_tapping.csv")
     df_chem_initial = load_standardized(raw_data_dir / "lf_initial_chemical_measurements.csv")
+    df_transformer = load_standardized(raw_data_dir / "eaf_transformer.csv")
 
     logger.info("Agregando series temporales...")
 
     # Agregar datos
     grp_gas = aggregate_gas_data(df_gas)
     grp_inj = aggregate_injection_data(df_inj)
+    grp_transformer = aggregate_transformer_data(df_transformer)
+    grp_charged = aggregate_charged_amount(df_ladle)
 
     logger.info("Pivotando materiales...")
     pivot_ladle = pivot_materials(df_ladle)
@@ -260,11 +334,16 @@ def build_master_dataset(raw_data_dir: Path) -> pd.DataFrame:
     # Merges (left joins)
     df_master = df_master.merge(grp_gas, on='heatid', how='left')
     df_master = df_master.merge(grp_inj, on='heatid', how='left')
+    df_master = df_master.merge(grp_transformer, on='heatid', how='left')
+    df_master = df_master.merge(grp_charged, on='heatid', how='left')
     df_master = df_master.merge(pivot_ladle, on='heatid', how='left')
     df_master = df_master.merge(datetime_range, on='heatid', how='left')
 
     # Rellenar nulos tecnicos
-    cols_to_fix = ['total_o2_lance', 'total_gas_lance', 'total_injected_carbon']
+    cols_to_fix = [
+        'total_o2_lance', 'total_gas_lance', 'total_injected_carbon',
+        'total_energy', 'total_duration', 'total_charged_amount'
+    ]
     df_master[cols_to_fix] = df_master[cols_to_fix].fillna(0)
 
     logger.info(f"Dataset maestro (inputs): {df_master.shape}")
