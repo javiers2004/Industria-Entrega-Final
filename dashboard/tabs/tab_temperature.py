@@ -16,6 +16,41 @@ from components.visualizations import plot_feature_importance, plot_prediction_v
 from components.indicators import temperature_quality_indicator
 
 
+"""
+Tab 2: Prediccion de Temperatura.
+"""
+import streamlit as st
+import pandas as pd
+import requests
+import os
+import json
+import joblib
+from pathlib import Path
+
+from src.config import (
+    INPUT_FEATURES, AVAILABLE_MODELS, MODEL_DISPLAY_NAMES,
+    BENTOML_URL, UI_MODEL_NAMES
+)
+from src.scripts.data_loader import get_data_path, get_project_root
+from src.scripts.evaluation import get_feature_importance
+from src.scripts.train_temperature import train_temperature_model, XGBOOST_AVAILABLE
+from components.visualizations import plot_feature_importance, plot_prediction_vs_real
+from components.indicators import temperature_quality_indicator
+
+
+def get_trained_models():
+    """Escanea el directorio de modelos y devuelve una lista de modelos entrenados."""
+    models_dir = get_project_root() / "trained_models"
+    models_dir.mkdir(exist_ok=True)
+    
+    model_files = [f for f in os.listdir(models_dir) if f.endswith(".joblib") and f.startswith("temp_")]
+    
+    # Ordenar por fecha de modificacion
+    model_files.sort(key=lambda f: os.path.getmtime(models_dir / f), reverse=True)
+    
+    return model_files
+
+
 def render_temperature_tab(df: pd.DataFrame):
     """
     Renderiza el tab de prediccion de temperatura.
@@ -26,26 +61,21 @@ def render_temperature_tab(df: pd.DataFrame):
     """
     st.header("Tarea 1: Prediccion de Temperatura Final")
 
-    section1, section2 = st.tabs([
-        "Entrenamiento y Evaluacion",
-        "Simulacion de Inferencia (BentoML)"
-    ])
-
-    with section1:
-        _render_training_section(df)
-
-    with section2:
-        _render_inference_section()
+    _render_training_section(df)
+    
+    st.divider()
+    
+    _render_inference_section()
 
 
 def _render_training_section(df: pd.DataFrame):
     """Seccion de entrenamiento y evaluacion de modelo."""
-    st.subheader("Entrenamiento y Evaluacion Dinamica")
+    st.subheader("Entrenamiento y Evaluacion de Modelos")
 
-    col_config, col_results = st.columns([1, 2])
+    col_train, col_eval = st.columns(2)
 
-    with col_config:
-        st.markdown("#### Configuracion del Modelo")
+    with col_train:
+        st.markdown("#### 1. Entrenar un Nuevo Modelo")
 
         # Seleccion de modelo (nombres amigables)
         ui_model_options = list(UI_MODEL_NAMES.keys())
@@ -66,7 +96,7 @@ def _render_training_section(df: pd.DataFrame):
         )
 
         # Hiperparametros condicionales
-        st.markdown("#### Hiperparametros")
+        st.markdown("##### Hiperparametros")
         n_estimators = 100
         max_depth = 6
         learning_rate = 0.1
@@ -93,25 +123,88 @@ def _render_training_section(df: pd.DataFrame):
         # Boton de entrenamiento
         train_temp_btn = st.button("Entrenar Modelo de Temperatura", type="primary", key='train_temp')
 
-    with col_results:
         if train_temp_btn and len(temp_selected_features) > 0:
-            with st.spinner("Entrenando modelo..."):
+            with st.spinner("Entrenando y guardando modelo..."):
                 try:
                     # Entrenar usando la funcion de src/
-                    model, metrics, feature_names, X_test, y_test, y_pred = train_temperature_model(
+                    _, _, _, _, _, _, model_path = train_temperature_model(
                         model_type=model_type,
                         n_estimators=n_estimators,
                         max_depth=max_depth,
-                        learning_rate=learning_rate
+                        learning_rate=learning_rate,
+                        save_model=True
+                    )
+                    st.success(f"Modelo entrenado y guardado en: `{model_path}`")
+                    # No es necesario recargar, el nuevo modelo aparecerá en la lista
+                except Exception as e:
+                    st.error(f"Error durante el entrenamiento: {e}")
+
+        elif train_temp_btn:
+            st.warning("Selecciona al menos una feature para entrenar el modelo.")
+
+    with col_eval:
+        st.markdown("#### 2. Evaluar Modelos Entrenados")
+        
+        trained_models = get_trained_models()
+
+        if not trained_models:
+            st.info("No hay modelos entrenados. Entrena un modelo a la izquierda.")
+            return
+
+        selected_model_file = st.selectbox(
+            "Selecciona un modelo para evaluar:",
+            options=trained_models,
+            key="eval_model_select"
+        )
+        
+        eval_button = st.button("Evaluar Modelo", key="eval_model_btn")
+
+        if eval_button and selected_model_file:
+            with st.spinner("Evaluando modelo..."):
+                try:
+                    models_dir = get_project_root() / "trained_models"
+                    model_path = models_dir / selected_model_file
+                    
+                    # Cargar modelo
+                    model = joblib.load(model_path)
+                    
+                    # Cargar datos para evaluacion
+                    from src.scripts.data_loader import load_and_clean_data
+                    from sklearn.model_selection import train_test_split
+                    from src.config import DEFAULT_HYPERPARAMS
+                    from src.scripts.evaluation import calculate_metrics
+
+                    df_eval = load_and_clean_data()
+                    
+                    # Asegurar que las features del modelo esten en el df
+                    # En una implementacion mas robusta, se guardarian las features con el modelo
+                    try:
+                        model_features = model.feature_names_in_
+                    except AttributeError:
+                        # Modelos como LinearRegression no tienen 'feature_names_in_' antes de fit
+                        # Asumimos las features de la config. Esto es una simplificacion.
+                        model_features = [f for f in INPUT_FEATURES if f in df_eval.columns]
+
+
+                    X = df_eval[model_features]
+                    y = df_eval['target_temperature']
+
+                    # Recrear el mismo split de datos
+                    _, X_test, _, y_test = train_test_split(
+                        X, y, 
+                        test_size=DEFAULT_HYPERPARAMS['test_size'], 
+                        random_state=DEFAULT_HYPERPARAMS['random_state']
                     )
 
-                    # Guardar en session_state
-                    st.session_state.temp_model = model
-                    st.session_state.temp_features = feature_names
-                    st.session_state.temp_model_type = model_type
+                    # Predecir y calcular metricas
+                    y_pred = model.predict(X_test)
+                    metrics = calculate_metrics(y_test, y_pred)
+
+                    # Extraer el tipo de modelo del nombre del archivo
+                    model_type_from_file = selected_model_file.split('_')[1]
 
                     # Mostrar metricas
-                    st.markdown("#### Metricas del Modelo")
+                    st.markdown("##### Metricas de Evaluacion")
                     m1, m2 = st.columns(2)
                     with m1:
                         st.metric("RMSE", f"{metrics['RMSE']:.2f}")
@@ -119,23 +212,21 @@ def _render_training_section(df: pd.DataFrame):
                         st.metric("R2", f"{metrics['R2']:.4f}")
 
                     # Graficos
-                    st.markdown("#### Visualizaciones")
-
+                    st.markdown("##### Visualizaciones")
+                    
                     # Importancia de variables
-                    importance_df = get_feature_importance(model, feature_names, model_type)
+                    importance_df = get_feature_importance(model, model_features, model_type_from_file)
                     if importance_df is not None:
-                        fig_imp = plot_feature_importance(importance_df, "Importancia de Variables - Temperatura")
+                        fig_imp = plot_feature_importance(importance_df, f"Importancia de Variables ({selected_model_file})")
                         st.plotly_chart(fig_imp, use_container_width=True)
 
                     # Prediccion vs Real
-                    fig_pred = plot_prediction_vs_real(y_test, y_pred, "Prediccion vs Real - Temperatura")
+                    fig_pred = plot_prediction_vs_real(y_test, y_pred, f"Prediccion vs Real ({selected_model_file})")
                     st.plotly_chart(fig_pred, use_container_width=True)
 
                 except Exception as e:
-                    st.error(f"Error durante el entrenamiento: {e}")
+                    st.error(f"Error durante la evaluacion: {e}")
 
-        elif train_temp_btn:
-            st.warning("Selecciona al menos una feature para entrenar el modelo.")
 
 
 def _render_inference_section():

@@ -9,3 +9,5 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 requests>=2.31.0
 watchdog
+plotly>=5.0.0
+joblib>=1.3.2

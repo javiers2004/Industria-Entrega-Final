@@ -10,9 +10,12 @@ Ejemplos:
     python -m src.models.train_temperature --model linear
 """
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -46,7 +49,8 @@ def train_temperature_model(
     max_depth: int = None,
     learning_rate: float = None,
     test_size: float = None,
-    random_state: int = None
+    random_state: int = None,
+    save_model: bool = True
 ) -> tuple:
     """
     Entrena un modelo de prediccion de temperatura.
@@ -59,10 +63,12 @@ def train_temperature_model(
     learning_rate : float - Learning rate (para XGBoost)
     test_size : float - Proporcion de datos para test
     random_state : int - Semilla para reproducibilidad
+    save_model : bool - Si es True, guarda el modelo y las metricas en disco.
 
     Returns:
     --------
-    tuple: (model, metrics, feature_names, X_test, y_test, y_pred)
+    tuple: (model, metrics, feature_names, X_test, y_test, y_pred, model_path)
+           model_path es None si save_model es False.
     """
     # Usar defaults si no se especifica
     n_estimators = n_estimators or DEFAULT_HYPERPARAMS['n_estimators']
@@ -128,7 +134,29 @@ def train_temperature_model(
     logger.info(f"R2: {metrics['R2']:.4f}")
     logger.info(f"MAE: {metrics['MAE']:.2f}")
 
-    return model, metrics, feature_cols, X_test, y_test, y_pred
+    # Guardar modelo y metricas
+    model_path = None
+    if save_model:
+        root_dir = get_project_root()
+        models_dir = root_dir / "trained_models"
+        models_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_name = f"temp_{model_type}_{timestamp}"
+
+        model_path = models_dir / f"{model_name}.joblib"
+        metrics_path = models_dir / f"{model_name}.json"
+
+        # Guardar modelo
+        joblib.dump(model, model_path)
+        logger.info(f"Modelo guardado en: {model_path}")
+
+        # Guardar metricas
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        logger.info(f"Metricas guardadas en: {metrics_path}")
+
+    return model, metrics, feature_cols, X_test, y_test, y_pred, model_path
 
 
 def save_plots(model, feature_names, model_type, y_test, y_pred, output_dir: Path):
