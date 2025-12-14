@@ -17,6 +17,12 @@ INPUT_FEATURES = [
 # Targets quimicos para prediccion
 CHEMICAL_TARGETS = ['valc', 'valmn', 'valsi', 'valp', 'vals']
 
+# Targets de temperatura (columnas que deben excluirse de features para temperatura)
+TEMPERATURE_TARGETS = ['target_temperature']
+
+# Columnas a excluir siempre como features (IDs, targets, etc.)
+EXCLUDE_FROM_FEATURES = ['heatid', 'target_temperature']
+
 # Columnas quimicas que usan coma como separador decimal en el CSV
 CHEMICAL_COLUMNS = ['valc', 'valsi', 'valmn', 'valp', 'vals', 'valcu', 'valcr', 'valmo', 'valni']
 

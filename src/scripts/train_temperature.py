@@ -50,7 +50,8 @@ def train_temperature_model(
     learning_rate: float = None,
     test_size: float = None,
     random_state: int = None,
-    save_model: bool = True
+    save_model: bool = True,
+    feature_list: List[str] = None
 ) -> tuple:
     """
     Entrena un modelo de prediccion de temperatura.
@@ -63,7 +64,8 @@ def train_temperature_model(
     learning_rate : float - Learning rate (para XGBoost)
     test_size : float - Proporcion de datos para test
     random_state : int - Semilla para reproducibilidad
-    save_model : bool - Si es True, guarda el modelo y las metricas en disco.
+    save_model : bool - Si es True, guarda el modelo y los metadatos en disco.
+    feature_list : List[str] - Lista de features a usar. Si es None, usa INPUT_FEATURES.
 
     Returns:
     --------
@@ -82,7 +84,11 @@ def train_temperature_model(
     df = load_and_clean_data()
 
     # Preparar features y target
-    feature_cols = [f for f in INPUT_FEATURES if f in df.columns]
+    # Usar feature_list si se proporciona, sino INPUT_FEATURES
+    if feature_list is not None:
+        feature_cols = [f for f in feature_list if f in df.columns]
+    else:
+        feature_cols = [f for f in INPUT_FEATURES if f in df.columns]
     X = df[feature_cols].copy()
     y = df['target_temperature'].copy()
 
@@ -134,27 +140,45 @@ def train_temperature_model(
     logger.info(f"R2: {metrics['R2']:.4f}")
     logger.info(f"MAE: {metrics['MAE']:.2f}")
 
-    # Guardar modelo y metricas
+    # Guardar modelo y metadatos
     model_path = None
     if save_model:
         root_dir = get_project_root()
-        models_dir = root_dir / "trained_models"
+        models_dir = root_dir / "models"
         models_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         model_name = f"temp_{model_type}_{timestamp}"
 
-        model_path = models_dir / f"{model_name}.joblib"
-        metrics_path = models_dir / f"{model_name}.json"
+        # Crear subdirectorio para este modelo
+        model_subdir = models_dir / model_name
+        model_subdir.mkdir(exist_ok=True)
+
+        model_path = model_subdir / "model.joblib"
+        metadata_path = model_subdir / "metadata.json"
 
         # Guardar modelo
         joblib.dump(model, model_path)
         logger.info(f"Modelo guardado en: {model_path}")
 
-        # Guardar metricas
-        with open(metrics_path, 'w') as f:
-            json.dump(metrics, f, indent=4)
-        logger.info(f"Metricas guardadas en: {metrics_path}")
+        # Guardar metadatos (features, hiperparametros, metricas)
+        metadata = {
+            "model_type": model_type,
+            "features": feature_cols,
+            "hyperparameters": {
+                "n_estimators": n_estimators,
+                "max_depth": max_depth,
+                "learning_rate": learning_rate,
+                "test_size": test_size,
+                "random_state": random_state
+            },
+            "metrics": metrics,
+            "timestamp": timestamp,
+            "target": "target_temperature"
+        }
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=4)
+        logger.info(f"Metadatos guardados en: {metadata_path}")
 
     return model, metrics, feature_cols, X_test, y_test, y_pred, model_path
 
