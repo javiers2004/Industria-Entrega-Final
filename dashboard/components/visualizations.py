@@ -157,6 +157,10 @@ def plot_correlation_bar(corr_df: pd.DataFrame, target: str):
     --------
     plotly Figure
     """
+    # Altura dinamica: 25px por variable, minimo 400px, maximo 1200px
+    num_vars = len(corr_df)
+    dynamic_height = max(400, min(1200, num_vars * 25))
+
     fig = px.bar(
         corr_df,
         x='Correlacion',
@@ -167,7 +171,7 @@ def plot_correlation_bar(corr_df: pd.DataFrame, target: str):
         color_continuous_scale='RdBu_r',
         range_color=[-1, 1]
     )
-    fig.update_layout(height=500)
+    fig.update_layout(height=dynamic_height)
     return fig
 
 

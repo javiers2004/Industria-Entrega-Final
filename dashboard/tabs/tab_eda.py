@@ -13,13 +13,7 @@ from dashboard.components.visualizations import (
     plot_boxplot,
     plot_correlation_heatmap
 )
-
-
-# Mapeo de datasets disponibles
-DATASET_OPTIONS = {
-    "Temperatura": "dataset_final_temp.csv",
-    "Quimica": "dataset_final_chemical.csv"
-}
+from src.config import EDA_DATASETS, TEMPERATURE_TARGETS
 
 
 def render_eda_tab():
@@ -36,10 +30,10 @@ def render_eda_tab():
     st.header("1- Analisis de datos relacionado con temperatura")
 
     # Cargar dataset de temperatura
-    df_temp = load_data_for_eda(DATASET_OPTIONS["Temperatura"])
+    df_temp = load_data_for_eda(EDA_DATASETS["Temperatura"])
 
     if df_temp is None or df_temp.empty:
-        st.error(f"No se pudo cargar el dataset: {DATASET_OPTIONS['Temperatura']}")
+        st.error(f"No se pudo cargar el dataset: {EDA_DATASETS['Temperatura']}")
     else:
         st.success("Dataset de Temperatura cargado correctamente.")
 
@@ -61,10 +55,10 @@ def render_eda_tab():
     st.header("2- Analisis de datos relacionados con la composicion quimica")
 
     # Cargar dataset de quimica
-    df_chem = load_data_for_eda(DATASET_OPTIONS["Quimica"])
+    df_chem = load_data_for_eda(EDA_DATASETS["Quimica"])
 
     if df_chem is None or df_chem.empty:
-        st.error(f"No se pudo cargar el dataset: {DATASET_OPTIONS['Quimica']}")
+        st.error(f"No se pudo cargar el dataset: {EDA_DATASETS['Quimica']}")
     else:
         st.success("Dataset de Quimica cargado correctamente.")
 
@@ -101,9 +95,10 @@ def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str, key_su
 
     # Determinar targets disponibles segun el dataset
     if selected_dataset == "Temperatura":
-        available_targets = ['target_temperature']
+        # Usar targets definidos en config, filtrando solo los que existen en el dataset
+        available_targets = [t for t in TEMPERATURE_TARGETS if t in df.columns]
     else:
-        # Para Quimica, buscar columnas que empiecen con 'target_'
+        # Para Quimica, buscar dinamicamente columnas que empiecen con 'target_'
         available_targets = [col for col in df.columns if col.startswith('target_')]
 
     if not available_targets:
@@ -141,9 +136,11 @@ def _render_distribution_analysis(df: pd.DataFrame, key_suffix: str = ""):
     """3. Renderiza analisis de distribuciones con histograma."""
     st.subheader("3. Distribuciones - Histograma")
 
-    # Columnas de fecha (excluir del selector de features)
-    date_cols = ['fecha_inicio', 'fecha_fin']
-    available_dates = [col for col in date_cols if col in df.columns]
+    # Detectar columnas de fecha dinamicamente (contienen 'fecha' en el nombre o son datetime)
+    date_cols = [col for col in df.columns
+                 if 'fecha' in col.lower()
+                 or pd.api.types.is_datetime64_any_dtype(df[col])]
+    available_dates = date_cols
 
     # Obtener todas las columnas numericas (excluir fechas)
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -230,43 +227,6 @@ def _render_univariate_advanced(df: pd.DataFrame, key_suffix: str = ""):
             st.metric("Q3 (75%)", f"{df[selected_box_var].quantile(0.75):.4f}")
         with col5:
             st.metric("Max", f"{df[selected_box_var].max():.4f}")
-
-
-def _render_bivariate_key(df: pd.DataFrame, selected_dataset: str):
-    """5. Renderiza analisis bivariado clave con Scatter Plot."""
-    st.subheader("5. Bivariado Clave - Scatter Plot")
-
-    x_col = 'total_o2_lance'
-    y_col = 'target_temperature'
-
-    # Verificar que las columnas existen
-    if x_col not in df.columns or y_col not in df.columns:
-        st.info(
-            f"Las columnas '{x_col}' y/o '{y_col}' no estan disponibles en el dataset "
-            f"'{selected_dataset}'. Este grafico esta disenado para el dataset de Temperatura."
-        )
-        return
-
-    fig_scatter = px.scatter(
-        df,
-        x=x_col,
-        y=y_col,
-        title=f'Relacion entre {x_col} y {y_col}',
-        color_discrete_sequence=['steelblue'],
-        opacity=0.6
-    )
-
-    fig_scatter.update_layout(
-        height=450,
-        xaxis_title=x_col,
-        yaxis_title=y_col
-    )
-
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-    # Mostrar correlacion entre las dos variables
-    corr_value = df[x_col].corr(df[y_col])
-    st.metric("Correlacion de Pearson", f"{corr_value:.4f}")
 
 
 def _render_multivariate_analysis(df: pd.DataFrame):

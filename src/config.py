@@ -69,3 +69,9 @@ DEFAULT_HYPERPARAMS = {
     'test_size': 0.2,
     'random_state': 42
 }
+
+# Datasets disponibles para EDA
+EDA_DATASETS: Dict[str, str] = {
+    "Temperatura": "dataset_final_temp.csv",
+    "Quimica": "dataset_final_chemical.csv"
+}
