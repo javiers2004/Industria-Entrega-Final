@@ -247,7 +247,10 @@ def get_final_chemical_composition(df_chem_final: pd.DataFrame) -> pd.DataFrame:
         DataFrame con heatid y targets quimicos (target_valc, target_valmn, etc.)
     """
     # Elementos quimicos a extraer como targets
-    chemical_elements = ['valc', 'valmn', 'valsi', 'valp', 'vals']
+    chemical_elements = [
+        'valc', 'valmn', 'valsi', 'valp', 'vals',
+        'valcu', 'valcr', 'valmo', 'valni' # <-- AÑADIDOS
+    ]
 
     # Verificar que existan las columnas
     available_elements = [col for col in chemical_elements if col in df_chem_final.columns]

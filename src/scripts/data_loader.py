@@ -50,10 +50,13 @@ def get_data_path(file_name: str = "dataset_final_temp.csv") -> Path:
     return DATA_PATH
 
 
-def load_and_clean_data() -> pd.DataFrame:
+def load_and_clean_data(file_name: str = "dataset_final_temp.csv") -> pd.DataFrame:
     """
     Carga y limpia el dataset de acero.
     Convierte columnas quimicas de formato europeo (coma) a float.
+
+    Parameters:
+        file_name: Nombre del archivo CSV a cargar (e.g., "dataset_final_chemical.csv"). <-- AÑADIDO
 
     Returns:
         DataFrame limpio
@@ -61,7 +64,7 @@ def load_and_clean_data() -> pd.DataFrame:
     Raises:
         FileNotFoundError: Si no se encuentra el archivo de datos
     """
-    data_path = get_data_path()
+    data_path = get_data_path(file_name) # <-- USANDO ARGUMENTO
 
     if not data_path.exists():
         raise FileNotFoundError(f"No se encuentra el dataset en: {data_path}")

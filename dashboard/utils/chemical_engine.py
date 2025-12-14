@@ -42,6 +42,7 @@ def load_chemical_data() -> pd.DataFrame:
         DataFrame con los datos quimicos
     """
     from dashboard.utils.data_engine import load_and_clean_data
+    # FIX: Cargar el dataset químico.
     return load_and_clean_data("dataset_final_chemical.csv")
 
 
@@ -57,12 +58,20 @@ def get_chemical_features(df: pd.DataFrame, target: str) -> List[str]:
     Returns:
         Lista de features disponibles
     """
-    # Columnas a excluir siempre
-    exclude_cols = ['heatid', target]
-    # Tambien excluir todas las columnas target_*
-    exclude_cols += [col for col in df.columns if col.startswith('target_')]
+    # 1. Determinar el feature de entrada inicial que corresponde al target final
+    initial_feature_to_exclude = target.replace('target_', '')
 
-    available = [col for col in df.columns if col not in exclude_cols]
+    # 2. Excluir columnas siempre (heatid, todos los target_*, y el feature inicial si aplica)
+    exclude_cols = ['heatid', target]
+    exclude_cols += [col for col in df.columns if col.startswith('target_')]
+    if initial_feature_to_exclude in df.columns:
+        exclude_cols.append(initial_feature_to_exclude)
+
+    # 3. Filtrar los features definidos en INPUT_FEATURES que estén en el DF y no estén en exclude_cols
+    available = [
+        col for col in INPUT_FEATURES
+        if col in df.columns and col not in exclude_cols
+    ]
     return available
 
 
@@ -79,23 +88,6 @@ def train_chemical_model(
 ) -> Tuple[Any, Dict[str, float], List[str], pd.DataFrame, pd.Series, np.ndarray, Optional[Path]]:
     """
     Entrena un modelo de prediccion de composicion quimica FINAL.
-
-    Parameters:
-    -----------
-    target : str - Elemento quimico FINAL a predecir ('target_valc', 'target_valmn', etc.)
-    model_type : str - Tipo de modelo ('xgboost', 'random_forest', 'linear')
-    n_estimators : int - Numero de estimadores (para tree models)
-    max_depth : int - Profundidad maxima (para tree models)
-    learning_rate : float - Learning rate (para XGBoost)
-    test_size : float - Proporcion de datos para test
-    random_state : int - Semilla para reproducibilidad
-    save_model : bool - Si es True, guarda el modelo y los metadatos en disco.
-    feature_list : List[str] - Lista de features a usar. Si es None, usa INPUT_FEATURES.
-
-    Returns:
-    --------
-    tuple: (model, metrics, feature_names, X_test, y_test, y_pred, model_path)
-           model_path es None si save_model es False.
     """
     if target not in CHEMICAL_TARGETS:
         raise ValueError(f"Target debe ser uno de: {CHEMICAL_TARGETS}")
@@ -109,26 +101,86 @@ def train_chemical_model(
 
     # Cargar datos
     logger.info("Cargando datos...")
+    # FIX: Cargar el dataset químico.
     df = load_chemical_data()
 
-    # Preparar features (excluyendo el target de los features)
-    if feature_list is not None:
-        feature_cols = [f for f in feature_list if f in df.columns and f != target]
+    # VERIFICACIÓN DE EXISTENCIA DE COLUMNA TARGET
+    if target not in df.columns:
+        error_msg = (
+            f"Error: La columna target '{target}' no se encuentra en el dataset cargado. "
+            f"Asegúrese de que su pipeline de procesamiento de datos ha creado esta columna."
+        )
+        logger.error(error_msg)
+        raise KeyError(error_msg)
+
+    # Preparar features: Usar la lista limpia de get_chemical_features si feature_list es None
+    if feature_list is None:
+        feature_cols = get_chemical_features(df, target)
     else:
-        feature_cols = [f for f in INPUT_FEATURES if f in df.columns and f != target]
+        # Asegurar que la lista de features seleccionada por el usuario es válida y aplica exclusiones
+        initial_feature_to_exclude = target.replace('target_', '')
+        feature_cols = [
+            f for f in feature_list
+            if f in df.columns and f != target and f != initial_feature_to_exclude
+        ]
 
     X = df[feature_cols].copy()
     y = df[target].copy()
 
-    # Eliminar filas con valores nulos
-    mask = ~(X.isnull().any(axis=1) | y.isnull())
-    X = X[mask]
-    y = y[mask]
+    logger.info(f"Muestras iniciales en dataset: {len(X)}")
 
-    logger.info(f"Dataset: {len(X)} muestras, {len(feature_cols)} features")
+    # 1. Eliminar filas donde el target es nulo (única eliminación de filas obligatoria)
+    rows_before_target_drop = len(X)
+    mask_target = y.notnull()
+    X = X[mask_target]
+    y = y[mask_target]
+    rows_after_target_drop = len(X)
+
+    if rows_after_target_drop < rows_before_target_drop:
+        logger.warning(f"Se eliminaron {rows_before_target_drop - rows_after_target_drop} filas debido a target nulo.")
+
+
+    # 2. FIX: Capping del Target (y) para eliminar Outliers extremos (5%/95% cuantil)
+    if len(y) > 100 and y.dtype in [np.float64, np.float32]:
+        try:
+            # Usamos 5% y 95% para máxima robustez contra el error R2 -700
+            lower_bound = y.quantile(0.05)
+            upper_bound = y.quantile(0.95)
+
+            outlier_mask = (y >= lower_bound) & (y <= upper_bound)
+
+            # Aplicar el filtro a X y a y
+            X = X[outlier_mask]
+            y = y[outlier_mask]
+
+            logger.warning(f"Se eliminaron {rows_after_target_drop - len(y)} filas por Outliers extremos en {target} (5%/95% Cuantil).")
+            rows_after_target_drop = len(y) # Actualizar para el logging final
+        except Exception as e:
+            logger.error(f"Error durante el capping de outliers: {e}. Continuando sin capping.")
+
+
+    # 3. FIX: Imputación de NaNs en features: reemplazar nulos por 0
+    X = X.fillna(0)
+
+    # 4. Limpieza final de valores infinitos
+    X = X.replace([np.inf, -np.inf], 0)
+    y = y.replace([np.inf, -np.inf], np.nan).dropna()
+
+    # FIX CRÍTICO: Usar .loc para asegurar que se selecciona filas por índice de fila.
+    X = X.loc[y.index]
+
+    if len(X) == 0:
+        raise ValueError(f"El dataset para '{target}' quedó vacío después de la limpieza. No se puede entrenar.")
+
+
+    logger.info(f"Dataset final de entrenamiento: {len(X)} muestras, {len(feature_cols)} features")
     logger.info(f"Target: {target.upper()}")
+    logger.info(f"Estadísticas del Target (Y): Min={y.min():.4f}, Max={y.max():.4f}, Media={y.mean():.4f}")
+
 
     # Split train/test
+    test_size = test_size or DEFAULT_HYPERPARAMS['test_size']
+    random_state = random_state or DEFAULT_HYPERPARAMS['random_state']
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
@@ -182,7 +234,8 @@ def train_chemical_model(
         models_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_name = f"chem_{target}_{model_type}_{timestamp}"
+        # Usar el nombre de target limpio (e.g., 'valc') para el nombre del directorio
+        model_name = f"chem_{target.replace('target_', '')}_{model_type}_{timestamp}"
 
         # Crear subdirectorio para este modelo
         model_subdir = models_dir / model_name
@@ -214,7 +267,7 @@ def train_chemical_model(
             json.dump(metadata, f, indent=4)
         logger.info(f"Metadatos guardados en: {metadata_path}")
 
-        # Guardar tambien en formato pkl para compatibilidad con el dashboard
+        # Guardar tambien en formato pkl para compatibilidad con el dashboard (para la evaluación)
         importance_df = get_feature_importance(model, feature_cols, model_type)
         _save_chemical_results(
             target=target,
@@ -238,14 +291,6 @@ def _save_chemical_results(
 ):
     """
     Guarda los resultados del modelo quimico en formato pkl para el dashboard.
-
-    Parameters:
-        target: Nombre del target quimico
-        y_test: Valores reales de test
-        y_pred: Predicciones del modelo
-        importance_df: DataFrame con importancia de features
-        metrics: Diccionario con metricas
-        models_dir: Directorio base de modelos
     """
     chemical_results_dir = models_dir / "chemical_results"
     chemical_results_dir.mkdir(parents=True, exist_ok=True)
@@ -257,7 +302,8 @@ def _save_chemical_results(
             'importance_df': importance_df,
             'metrics': metrics
         }
-        results_file = chemical_results_dir / f"results_{target}.pkl"
+        # Usar el nombre de target limpio (e.g., 'valc' en lugar de 'target_valc')
+        results_file = chemical_results_dir / f"results_{target.replace('target_', '')}.pkl"
         try:
             with open(results_file, 'wb') as f:
                 pickle.dump(results_data, f)
@@ -269,9 +315,6 @@ def _save_chemical_results(
 def get_trained_chemical_models() -> List[str]:
     """
     Escanea el directorio de modelos y devuelve una lista de modelos quimicos entrenados.
-
-    Returns:
-        Lista de nombres de directorios de modelos quimicos
     """
     import os
     models_dir = get_project_root() / "models"
@@ -294,12 +337,6 @@ def get_trained_chemical_models() -> List[str]:
 def load_chemical_model(model_name: str):
     """
     Carga un modelo quimico desde su directorio.
-
-    Parameters:
-        model_name: Nombre del directorio del modelo
-
-    Returns:
-        Modelo cargado
     """
     models_dir = get_project_root() / "models"
     model_path = models_dir / model_name / "model.joblib"
@@ -309,12 +346,6 @@ def load_chemical_model(model_name: str):
 def load_chemical_model_metadata(model_name: str) -> Optional[Dict]:
     """
     Carga los metadatos de un modelo quimico si existen.
-
-    Parameters:
-        model_name: Nombre del directorio del modelo
-
-    Returns:
-        Diccionario con metadatos o None
     """
     models_dir = get_project_root() / "models"
     metadata_path = models_dir / model_name / "metadata.json"

@@ -2,18 +2,18 @@
 Script CLI para entrenar modelos de prediccion de composicion quimica.
 
 Uso:
-    python -m src.models.train_chemical --target valc [--model xgboost|rf|linear]
+    python -m src.scripts.train_chemical --target target_valc [--model xgboost|rf|linear]
 
 Ejemplos:
-    python -m src.models.train_chemical --target valc --model xgboost
-    python -m src.models.train_chemical --target valmn --model rf --n-estimators 200
-    python -m src.models.train_chemical --target valsi --model linear
+    python -m src.scripts.train_chemical --target target_valc --model xgboost
+    python -m src.scripts.train_chemical --target target_valmn --model rf --n-estimators 200
+    python -m src.scripts.train_chemical --target target_valcu --model linear
 
-Targets disponibles: valc, valmn, valsi, valp, vals
+Targets disponibles: target_valc, target_valmn, target_valsi, target_valp, target_vals, target_valcu, target_valcr, target_valmo, target_valni
 """
 import argparse
 import json
-import pickle # <-- NUEVA IMPORTACIÓN
+import pickle
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 
@@ -56,7 +56,7 @@ def train_chemical_model(
 
     Parameters:
     -----------
-    target : str - Elemento quimico a predecir ('valc', 'valmn', 'valsi', 'valp', 'vals')
+    target : str - Elemento quimico a predecir ('target_valc', 'target_valmn', ..., 'target_valni')
     model_type : str - Tipo de modelo ('xgboost', 'random_forest', 'linear')
     n_estimators : int - Numero de estimadores (para tree models)
     max_depth : int - Profundidad maxima (para tree models)
@@ -80,20 +80,72 @@ def train_chemical_model(
 
     # Cargar datos
     logger.info("Cargando datos...")
-    df = load_and_clean_data()
+    # FIX: Cargar el dataset químico.
+    df = load_and_clean_data(file_name="dataset_final_chemical.csv")
 
-    # Preparar features (excluyendo el target de los features)
-    feature_cols = [f for f in INPUT_FEATURES if f in df.columns and f != target]
+    # VERIFICACIÓN DE EXISTENCIA DE COLUMNA TARGET
+    if target not in df.columns:
+        error_msg = (
+            f"Error: La columna target '{target}' no se encuentra en el dataset cargado. "
+            f"Asegúrese de que su pipeline de procesamiento de datos ha creado esta columna."
+        )
+        logger.error(error_msg)
+        raise KeyError(error_msg)
+
+    # 1. Determinar el feature de entrada inicial que corresponde al target final
+    initial_feature_to_exclude = target.replace('target_', '')
+
+    # 2. Preparar features (excluyendo el target final Y el feature inicial del mismo elemento si existe)
+    feature_cols = [
+        f for f in INPUT_FEATURES
+        if f in df.columns and f != target and f != initial_feature_to_exclude
+    ]
     X = df[feature_cols].copy()
     y = df[target].copy()
 
-    # Eliminar filas con valores nulos
-    mask = ~(X.isnull().any(axis=1) | y.isnull())
-    X = X[mask]
-    y = y[mask]
+    logger.info(f"Muestras iniciales en dataset: {len(X)}")
 
-    logger.info(f"Dataset: {len(X)} muestras, {len(feature_cols)} features")
-    logger.info(f"Target: {target.upper()}")
+    # 3. Eliminar filas donde el target es nulo (es la única limpieza de filas obligatoria)
+    rows_before_target_drop = len(X)
+    mask_target = y.notnull()
+    X = X[mask_target]
+    y = y[mask_target]
+    rows_after_target_drop = len(X)
+
+    if rows_after_target_drop < rows_before_target_drop:
+        logger.warning(f"Se eliminaron {rows_before_target_drop - rows_after_target_drop} filas debido a target nulo.")
+
+    # FIX FINAL: Capping del Target (y) para eliminar Outliers extremos
+    # Esto soluciona R2 negativos al acotar los valores extremos que distorsionan el MSE.
+    if len(y) > 100: # Solo si tenemos suficientes datos
+        lower_bound = y.quantile(0.01)
+        upper_bound = y.quantile(0.99)
+
+        # Crear una máscara para identificar y eliminar outliers del target
+        outlier_mask = (y >= lower_bound) & (y <= upper_bound)
+
+        # Aplicar el filtro a X y a y
+        X = X[outlier_mask]
+        y = y[outlier_mask]
+
+        logger.warning(f"Se eliminaron {rows_after_target_drop - len(y)} filas por Outliers extremos en {target} (1%/99% Cuantil).")
+        rows_after_target_drop = len(y) # Actualizar para el logging final
+
+    # 4. Imputación de NaNs en features: reemplazar nulos por 0
+    X = X.fillna(0)
+
+    # 5. Limpieza final de valores infinitos que puedan haber quedado
+    X = X.replace([np.inf, -np.inf], np.nan).dropna(how='all')
+    y = y[X.index] # Mantener y sincronizado con X
+
+    # VERIFICACIÓN DE TAMAÑO DEL DATASET DESPUÉS DE LIMPIEZA/IMPUTACIÓN
+    if len(X) == 0:
+        error_msg = f"Error: El dataset para '{target}' quedó vacío después de la limpieza. No se puede entrenar."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    logger.info(f"Dataset final de entrenamiento: {len(X)} muestras, {len(feature_cols)} features")
+    logger.info(f"Estadísticas del Target (Y): Min={y.min():.4f}, Max={y.max():.4f}, Media={y.mean():.4f}")
 
     # Split train/test
     X_train, X_test, y_train, y_test = train_test_split(
@@ -156,7 +208,7 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
     metrics = calculate_metrics(y_test, y_pred)
     importance_df = get_feature_importance(model, feature_names, model_type)
 
-    # --- Seccion de Guardado del Archivo Único .pkl para el Dashboard (NUEVO) ---
+    # --- Seccion de Guardado del Archivo Único .pkl para el Dashboard ---
     if importance_df is not None:
         results_data = {
             'y_test': y_test,
@@ -164,7 +216,7 @@ def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_
             'importance_df': importance_df,
             'metrics': metrics
         }
-        results_file = chemical_results_dir / f"results_{target}.pkl"
+        results_file = chemical_results_dir / f"results_{target.replace('target_', '')}.pkl"
         try:
             with open(results_file, 'wb') as f:
                 pickle.dump(results_data, f)
@@ -277,13 +329,17 @@ def main():
     logger.info("=" * 60)
 
     # Entrenar modelo
-    model, metrics, feature_names, X_test, y_test, y_pred = train_chemical_model(
-        target=args.target,
-        model_type=model_type,
-        n_estimators=args.n_estimators,
-        max_depth=args.max_depth,
-        learning_rate=args.learning_rate
-    )
+    try:
+        model, metrics, feature_names, X_test, y_test, y_pred = train_chemical_model(
+            target=args.target,
+            model_type=model_type,
+            n_estimators=args.n_estimators,
+            max_depth=args.max_depth,
+            learning_rate=args.learning_rate
+        )
+    except (KeyError, ValueError) as e:
+        logger.error(f"No se pudo iniciar el entrenamiento. Detalle: {e}")
+        return # Salir de la ejecucion si hay un error de columna
 
     # Guardar graficos y datos
     if not args.no_plots:

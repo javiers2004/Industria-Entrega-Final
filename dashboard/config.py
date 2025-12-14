@@ -1,6 +1,6 @@
 """
-Configuracion y constantes del dashboard EAF.
-Copia independiente de src/config.py para desacoplar el dashboard.
+Configuracion y constantes globales del proyecto EAF.
+Compartidas entre src/ y dashboard/.
 """
 import os
 from typing import Dict, List, Tuple
@@ -15,7 +15,10 @@ INPUT_FEATURES = [
 ]
 
 # Targets quimicos para prediccion (valores FINALES a predecir)
-CHEMICAL_TARGETS = ['target_valc', 'target_valmn', 'target_valsi', 'target_valp', 'target_vals']
+CHEMICAL_TARGETS = [
+    'target_valc', 'target_valmn', 'target_valsi', 'target_valp', 'target_vals',
+    'target_valcu', 'target_valcr', 'target_valmo', 'target_valni' # <-- Lista Completa
+]
 
 # Targets de temperatura (columnas que deben excluirse de features para temperatura)
 TEMPERATURE_TARGETS = ['target_temperature']
@@ -23,7 +26,8 @@ TEMPERATURE_TARGETS = ['target_temperature']
 # Columnas a excluir siempre como features (IDs, targets, etc.)
 EXCLUDE_FROM_FEATURES = [
     'heatid', 'target_temperature',
-    'target_valc', 'target_valmn', 'target_valsi', 'target_valp', 'target_vals'
+    'target_valc', 'target_valmn', 'target_valsi', 'target_valp', 'target_vals',
+    'target_valcu', 'target_valcr', 'target_valmo', 'target_valni' # <-- Lista Completa
 ]
 
 # Columnas quimicas que usan coma como separador decimal en el CSV
@@ -45,7 +49,11 @@ CHEMICAL_SPECS = {
     'target_valmn': (0.30, 1.50),
     'target_valsi': (0.10, 0.60),
     'target_valp': (0.001, 0.025),
-    'target_vals': (0.001, 0.025)
+    'target_vals': (0.001, 0.025),
+    'target_valcu': (0.001, 0.030),
+    'target_valcr': (0.001, 0.030),
+    'target_valmo': (0.001, 0.010),
+    'target_valni': (0.001, 0.030)
 }
 
 # Rangos de temperatura para indicador de calidad
