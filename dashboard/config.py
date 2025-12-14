@@ -1,6 +1,6 @@
 """
-Configuracion y constantes globales del proyecto EAF.
-Compartidas entre src/ y dashboard/.
+Configuracion y constantes del dashboard EAF.
+Copia independiente de src/config.py para desacoplar el dashboard.
 """
 import os
 from typing import Dict, List, Tuple

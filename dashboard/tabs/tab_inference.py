@@ -14,9 +14,9 @@ import signal
 import time
 import platform
 
-from src.config import BENTOML_URL, MODEL_DISPLAY_NAMES
-from src.scripts.data_loader import get_project_root
-from components.indicators import temperature_quality_indicator
+from dashboard.config import BENTOML_URL, MODEL_DISPLAY_NAMES
+from dashboard.utils.data_engine import get_project_root
+from dashboard.components.indicators import temperature_quality_indicator
 
 
 # =============================================================================

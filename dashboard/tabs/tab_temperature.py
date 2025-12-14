@@ -7,13 +7,13 @@ import os
 import json
 import joblib
 
-from src.config import (
-    MODEL_DISPLAY_NAMES, UI_MODEL_NAMES, EXCLUDE_FROM_FEATURES
+from dashboard.config import (
+    MODEL_DISPLAY_NAMES, UI_MODEL_NAMES, EXCLUDE_FROM_FEATURES, DEFAULT_HYPERPARAMS
 )
-from src.scripts.data_loader import get_project_root
-from src.scripts.evaluation import get_feature_importance
-from src.scripts.train_temperature import train_temperature_model
-from components.visualizations import plot_feature_importance, plot_prediction_vs_real
+from dashboard.utils.data_engine import get_project_root, load_and_clean_data
+from dashboard.utils.model_engine import get_feature_importance, train_temperature_model
+from dashboard.components.visualizations import plot_feature_importance, plot_prediction_vs_real
+from sklearn.model_selection import train_test_split
 
 
 def get_available_features(df: pd.DataFrame) -> list:
@@ -280,10 +280,6 @@ def _render_evaluation_section(df: pd.DataFrame):
                     model_type_from_metadata = selected_model_file.split('_')[1]
 
                 # Cargar datos para evaluacion
-                from src.scripts.data_loader import load_and_clean_data
-                from sklearn.model_selection import train_test_split
-                from src.config import DEFAULT_HYPERPARAMS
-
                 df_eval = load_and_clean_data()
 
                 # Verificar que las features existen en el dataset

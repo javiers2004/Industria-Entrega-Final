@@ -3,7 +3,7 @@ Indicadores de calidad industrial.
 """
 from typing import Literal, Tuple
 
-from src.config import CHEMICAL_SPECS, TEMPERATURE_RANGES
+from dashboard.config import CHEMICAL_SPECS, TEMPERATURE_RANGES
 
 # Type aliases para mayor claridad
 IndicatorStatus = Literal['success', 'warning', 'error', 'info']

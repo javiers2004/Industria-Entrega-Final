@@ -8,23 +8,23 @@ import sys
 import atexit
 from pathlib import Path
 
-# Añadir raiz del proyecto al path para poder importar src/
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 # Añadir directorio dashboard al path para imports internos
 DASHBOARD_ROOT = Path(__file__).resolve().parent
 if str(DASHBOARD_ROOT) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_ROOT))
 
+# Añadir raiz del proyecto al path para imports de dashboard.*
+PROJECT_ROOT = DASHBOARD_ROOT.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import streamlit as st
 
-from utils.cached_loader import load_and_clean_data
-from tabs.tab_eda import render_eda_tab
-from tabs.tab_temperature import render_temperature_tab
-from tabs.tab_chemical import render_chemical_tab
-from tabs.tab_inference import render_inference_tab, cleanup_bentoml_service
+from dashboard.utils.cached_loader import load_and_clean_data
+from dashboard.tabs.tab_eda import render_eda_tab
+from dashboard.tabs.tab_temperature import render_temperature_tab
+from dashboard.tabs.tab_chemical import render_chemical_tab
+from dashboard.tabs.tab_inference import render_inference_tab, cleanup_bentoml_service
 
 # Registrar cleanup de BentoML al cerrar la aplicacion
 atexit.register(cleanup_bentoml_service)

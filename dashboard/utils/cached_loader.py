@@ -2,14 +2,14 @@
 Wrapper con cache de Streamlit para carga de datos.
 """
 import os
-import pickle # <-- NUEVA IMPORTACIÓN
+import pickle
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 import pandas as pd
 import streamlit as st
 
-from src.scripts.data_loader import load_and_clean_data as _load_data, get_data_path, get_project_root
+from dashboard.utils.data_engine import load_and_clean_data as _load_data, get_data_path, get_project_root
 
 
 @st.cache_data(ttl=3600)  # Cache con TTL de 1 hora

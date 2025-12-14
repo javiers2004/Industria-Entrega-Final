@@ -13,7 +13,7 @@ from dashboard.components.visualizations import (
     plot_boxplot,
     plot_correlation_heatmap
 )
-from src.config import EDA_DATASETS, TEMPERATURE_TARGETS
+from dashboard.config import EDA_DATASETS, TEMPERATURE_TARGETS
 
 
 def render_eda_tab():
