@@ -34,6 +34,13 @@ try:
 except ImportError:
     XGBOOST_AVAILABLE = False
 
+# NEW: Import for BentoML saving
+try:
+    import bentoml
+    BENTOML_AVAILABLE = True
+except ImportError:
+    BENTOML_AVAILABLE = False
+
 from ..config import (
     INPUT_FEATURES, CHEMICAL_TARGETS, DEFAULT_HYPERPARAMS,
     MODEL_DISPLAY_NAMES, CHEMICAL_SPECS
@@ -196,6 +203,36 @@ def train_chemical_model(
     return model, metrics, feature_cols, X_test, y_test, y_pred
 
 
+def save_model_bentoml(model, target: str, model_type: str):
+    """
+    Guarda el modelo usando BentoML con un nombre identificable (eaf_chemical_{elemento}_{tipo_modelo}).
+    """
+    if not BENTOML_AVAILABLE:
+        logger.warning("BENTOML no esta disponible. El modelo no se guardara en BentoML.")
+        return None
+
+    # Generar nombre: eaf_chemical_{target_valc}_xgboost -> eaf_chemical_valc_xgboost
+    model_name_suffix = target.replace('target_', '')
+    model_name = f"eaf_chemical_{model_name_suffix}_{model_type}"
+
+    logger.info(f"Guardando modelo en BentoML como '{model_name}'...")
+
+    # Usar el savetype correcto
+    if model_type == 'xgboost':
+        # bentoml.xgboost.save_model
+        saved_model = bentoml.xgboost.save_model(model_name, model)
+    # Random Forest y Linear Regression son modelos de scikit-learn
+    elif model_type in ['random_forest', 'linear']:
+        # bentoml.sklearn.save_model
+        saved_model = bentoml.sklearn.save_model(model_name, model)
+    else:
+        logger.warning(f"Tipo de modelo '{model_type}' no soportado para guardado en BentoML.")
+        return None
+
+    logger.info(f"Modelo guardado: {saved_model}")
+    return saved_model
+
+
 def save_plots(model, feature_names, model_type, target, y_test, y_pred, output_dir: Path):
     """Guarda graficos, métricas y datos de prediccion para el dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -318,6 +355,11 @@ def main():
         action='store_true',
         help='No generar graficos'
     )
+    parser.add_argument(
+        '--no-bentoml',
+        action='store_true',
+        help='No guardar el modelo entrenado en BentoML'
+    )
 
     args = parser.parse_args()
 
@@ -345,6 +387,10 @@ def main():
     if not args.no_plots:
         output_dir = get_project_root() / args.output_dir
         save_plots(model, feature_names, model_type, args.target, y_test, y_pred, output_dir)
+
+    # Guardar modelo en BentoML con nombre identificable
+    if not args.no_bentoml:
+        save_model_bentoml(model, args.target, model_type)
 
     logger.info("=" * 60)
     logger.info("Entrenamiento completado!")
