@@ -402,7 +402,7 @@ def _render_model_evaluation(model_name: str):
                         importance_df,
                         f"Importancia de Variables - {target.upper()}"
                     )
-                    st.plotly_chart(fig_imp, use_container_width=True)
+                    st.plotly_chart(fig_imp, width='stretch')
 
             with col2:
                 # Prediccion vs Real
@@ -410,7 +410,7 @@ def _render_model_evaluation(model_name: str):
                     y_test, y_pred,
                     f"Prediccion vs Real - {target.upper()}"
                 )
-                st.plotly_chart(fig_pred, use_container_width=True)
+                st.plotly_chart(fig_pred, width='stretch')
 
         except Exception as e:
             st.error(f"Error durante la evaluacion: {e}")
@@ -550,7 +550,7 @@ def _render_prediction_analysis(target_data: Dict[str, Any], target_name: str):
             y_test, y_pred,
             title=f"Prediccion vs Real - {target_name.upper()}"
         )
-        st.plotly_chart(fig_pred, use_container_width=True)
+        st.plotly_chart(fig_pred, width='stretch')
 
     with col_chart2:
         try:
@@ -559,7 +559,7 @@ def _render_prediction_analysis(target_data: Dict[str, Any], target_name: str):
                 spec_range=(spec_metrics.get('spec_min'), spec_metrics.get('spec_max')),
                 title=f"Distribucion - {target_name.upper()}"
             )
-            st.plotly_chart(fig_dist, use_container_width=True)
+            st.plotly_chart(fig_dist, width='stretch')
         except Exception:
             pass
 
@@ -578,4 +578,4 @@ def _render_feature_importance_section(target_data: Dict[str, Any], target_name:
         importance_df,
         title=f"Top 15 Variables - {target_name.upper()}"
     )
-    st.plotly_chart(fig_imp, use_container_width=True)
+    st.plotly_chart(fig_imp, width='stretch')

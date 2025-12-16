@@ -86,7 +86,7 @@ def _render_summary_metrics(df: pd.DataFrame):
         st.metric("Memoria (MB)", f"{memory_mb:.2f}")
 
     st.markdown("#### Estadisticas Descriptivas")
-    st.dataframe(df.describe().T, use_container_width=True)
+    st.dataframe(df.describe().T, width='stretch')
 
 
 def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str, key_suffix: str = ""):
@@ -127,7 +127,7 @@ def _render_correlation_analysis(df: pd.DataFrame, selected_dataset: str, key_su
         }).sort_values('Correlacion', key=abs, ascending=False)
 
         fig_corr = plot_correlation_bar(corr_df, selected_corr_target)
-        st.plotly_chart(fig_corr, use_container_width=True)
+        st.plotly_chart(fig_corr, width='stretch')
     else:
         st.warning(f"La variable '{selected_corr_target}' no es numerica o no existe en el dataset.")
 
@@ -191,7 +191,7 @@ def _render_distribution_analysis(df: pd.DataFrame, key_suffix: str = ""):
         # Histograma de variable numerica
         fig = plot_histogram(df, selected_hist_var)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_univariate_advanced(df: pd.DataFrame, key_suffix: str = ""):
@@ -213,7 +213,7 @@ def _render_univariate_advanced(df: pd.DataFrame, key_suffix: str = ""):
 
     if selected_box_var:
         fig_box = plot_boxplot(df, selected_box_var)
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_box, width='stretch')
 
         # Mostrar estadisticas adicionales
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -234,7 +234,7 @@ def _render_multivariate_analysis(df: pd.DataFrame):
     st.subheader("5. Multivariado - Heatmap de Correlaciones")
 
     fig_heatmap = plot_correlation_heatmap(df, "Matriz de Correlacion del Dataset")
-    st.plotly_chart(fig_heatmap, use_container_width=True)
+    st.plotly_chart(fig_heatmap, width='stretch')
 
     # Informacion adicional
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()

@@ -320,11 +320,11 @@ def _render_evaluation_section(df: pd.DataFrame):
                 importance_df = get_feature_importance(model, model_features, model_type_from_metadata)
                 if importance_df is not None:
                     fig_imp = plot_feature_importance(importance_df, "Importancia de Variables")
-                    st.plotly_chart(fig_imp, use_container_width=True)
+                    st.plotly_chart(fig_imp, width='stretch')
 
                 # Prediccion vs Real
                 fig_pred = plot_prediction_vs_real(y_test, y_pred, "Prediccion vs Real")
-                st.plotly_chart(fig_pred, use_container_width=True)
+                st.plotly_chart(fig_pred, width='stretch')
 
             except Exception as e:
                 st.error(f"Error durante la evaluacion: {e}")
