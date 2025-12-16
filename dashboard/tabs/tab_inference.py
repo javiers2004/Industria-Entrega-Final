@@ -192,7 +192,7 @@ def _stop_bentoml_service() -> bool:
         try:
             pid = st.session_state['bentoml_pid']
             if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
             else:
                 os.kill(pid, signal.SIGTERM)
             st.session_state['bentoml_pid'] = None
@@ -209,7 +209,7 @@ def _stop_bentoml_service() -> bool:
     for pid in pids:
         try:
             if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
             else:
                 os.kill(pid, signal.SIGTERM)
         except Exception:
@@ -277,7 +277,7 @@ def cleanup_bentoml_service():
         for pid in pids:
             try:
                 if platform.system() == "Windows":
-                    subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
                                    capture_output=True, timeout=5)
                 else:
                     os.kill(pid, signal.SIGTERM)
