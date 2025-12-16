@@ -182,36 +182,76 @@ def _start_bentoml_service() -> bool:
 def _stop_bentoml_service() -> bool:
     """
     Detiene el servicio BentoML.
-
+    
     Returns:
     --------
     bool - True si se detuvo correctamente, False en caso contrario
     """
-    # Intentar usando el PID guardado primero
+    import psutil  # Necesario para matar el árbol de procesos (padre + hijos)
+
+    # Función interna para matar el proceso y toda su descendencia (workers)
+    def kill_tree_recursively(pid):
+        try:
+            parent = psutil.Process(pid)
+            children = parent.children(recursive=True)  # Obtener todos los hijos
+            
+            # 1. Matar a los hijos primero
+            for child in children:
+                try:
+                    child.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            psutil.wait_procs(children, timeout=3) # Esperar a que mueran
+            
+            # 2. Matar al padre
+            parent.kill()
+            parent.wait(3)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # Fallback: Si psutil falla, usar el método nativo del sistema
+            try:
+                if platform.system() == "Windows":
+                    # El flag /T mata también a los procesos hijos (Tree)
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+                else:
+                    os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+
+    # --- LÓGICA ORIGINAL MEJORADA ---
+
+    # 1. Intentar usando el PID guardado primero
     if 'bentoml_pid' in st.session_state and st.session_state['bentoml_pid']:
         try:
             pid = st.session_state['bentoml_pid']
-            if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
-            else:
-                os.kill(pid, signal.SIGTERM)
+            st.write(f"🛑 Deteniendo PID guardado: {pid} (y subprocesos)...")
+            
+            kill_tree_recursively(pid)  # <--- Usamos la limpieza profunda aquí
+            
             st.session_state['bentoml_pid'] = None
             time.sleep(1)
             if not is_port_in_use(3000):
                 return True
-        except ProcessLookupError:
-            st.session_state['bentoml_pid'] = None
         except Exception:
-            pass
+            st.session_state['bentoml_pid'] = None
 
-    # Fallback: matar procesos en el puerto 3000
+    # 2. Fallback: matar procesos en el puerto 3000
+    # Primero intentamos barrer con psutil (más preciso)
+    try:
+        for proc in psutil.process_iter(['pid']):
+            try:
+                for conn in proc.connections(kind='inet'):
+                    if conn.laddr.port == 3000:
+                        kill_tree_recursively(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    except Exception:
+        pass
+
+    # Segundo barrido con tu función original _get_pid_on_port por seguridad
     pids = _get_pid_on_port(3000)
     for pid in pids:
         try:
-            if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
-            else:
-                os.kill(pid, signal.SIGTERM)
+            kill_tree_recursively(pid)
         except Exception:
             pass
 
@@ -277,7 +317,7 @@ def cleanup_bentoml_service():
         for pid in pids:
             try:
                 if platform.system() == "Windows":
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                    subprocess.run(["taskkill", "/F", "/PID", str(pid)],
                                    capture_output=True, timeout=5)
                 else:
                     os.kill(pid, signal.SIGTERM)
