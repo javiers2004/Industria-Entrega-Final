@@ -43,6 +43,7 @@ def load_chemical_data() -> pd.DataFrame:
     """
     from dashboard.utils.data_engine import load_and_clean_data
     # FIX: Cargar el dataset químico.
+    # NOTA: Este dataset ya está filtrado de outliers (0.01/0.99) por el pipeline.
     return load_and_clean_data("dataset_final_chemical.csv")
 
 
@@ -139,25 +140,9 @@ def train_chemical_model(
     if rows_after_target_drop < rows_before_target_drop:
         logger.warning(f"Se eliminaron {rows_before_target_drop - rows_after_target_drop} filas debido a target nulo.")
 
-
     # 2. FIX: Capping del Target (y) para eliminar Outliers extremos (5%/95% cuantil)
-    if len(y) > 100 and y.dtype in [np.float64, np.float32]:
-        try:
-            # Usamos 5% y 95% para máxima robustez contra el error R2 -700
-            lower_bound = y.quantile(0.05)
-            upper_bound = y.quantile(0.95)
-
-            outlier_mask = (y >= lower_bound) & (y <= upper_bound)
-
-            # Aplicar el filtro a X y a y
-            X = X[outlier_mask]
-            y = y[outlier_mask]
-
-            logger.warning(f"Se eliminaron {rows_after_target_drop - len(y)} filas por Outliers extremos en {target} (5%/95% Cuantil).")
-            rows_after_target_drop = len(y) # Actualizar para el logging final
-        except Exception as e:
-            logger.error(f"Error durante el capping de outliers: {e}. Continuando sin capping.")
-
+    # ELIMINADO: La lógica de filtrado de outliers se ha movido a la fase de Feature Engineering
+    # en el notebook, por lo que el dataset cargado ya está limpio.
 
     # 3. FIX: Imputación de NaNs en features: reemplazar nulos por 0
     X = X.fillna(0)
