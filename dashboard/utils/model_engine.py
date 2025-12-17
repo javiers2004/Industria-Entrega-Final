@@ -142,7 +142,7 @@ def train_temperature_model(
     else:
         feature_cols = [f for f in INPUT_FEATURES if f in df.columns]
     X = df[feature_cols].copy()
-    y = df['target_temperature'].copy()
+    y = df['target_next_temp'].copy()
 
     # Eliminar filas con valores nulos
     mask = ~(X.isnull().any(axis=1) | y.isnull())
@@ -226,7 +226,7 @@ def train_temperature_model(
             },
             "metrics": metrics,
             "timestamp": timestamp,
-            "target": "target_temperature"
+            "target": "target_next_temp"
         }
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=4)

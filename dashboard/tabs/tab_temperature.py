@@ -289,7 +289,7 @@ def _render_evaluation_section(df: pd.DataFrame):
                     return
 
                 X = df_eval[model_features]
-                y = df_eval['target_temperature']
+                y = df_eval['target_next_temp']
 
                 # Eliminar filas con valores nulos
                 mask = ~(X.isnull().any(axis=1) | y.isnull())

@@ -7,11 +7,19 @@ from typing import Dict, List, Tuple
 
 # Features de Input disponibles en el dataset
 INPUT_FEATURES = [
-    'total_o2_lance', 'total_gas_lance', 'total_injected_carbon',
-    'valc', 'valsi', 'valmn', 'valp', 'vals', 'valcu', 'valcr', 'valmo', 'valni',
-    'added_mat_140107', 'added_mat_202007', 'added_mat_202008',
-    'added_mat_202039', 'added_mat_202063', 'added_mat_203068',
-    'added_mat_203085', 'added_mat_205069', 'added_mat_360258', 'added_mat_705043'
+    # --- Comunes a ambos ---
+    'total_energy', 'total_duration_min', 'total_o2', 'total_gas', 
+    'total_carbon', 'total_charge',
+    'mat_140107', 'mat_202007', 'mat_202008', 'mat_202039', 'mat_202063', 
+    'mat_203068', 'mat_203085', 'mat_205069', 'mat_360258', 'mat_705043',
+    
+    # --- Específicos de Temperatura (dataset_temperature.csv) ---
+    'valo2_ppm', 'temp_actual', 'oxidation', 'num_measurement', 
+    'time_since_start', 'horizon_min',
+    
+    # --- Específicos de Química (dataset_chemical.csv) ---
+    'init_valc', 'init_valsi', 'init_valmn', 'init_valp', 'init_vals', 
+    'init_valcu', 'init_valcr', 'init_valmo', 'init_valni'
 ]
 
 # Targets quimicos para prediccion (valores FINALES a predecir)
@@ -21,11 +29,11 @@ CHEMICAL_TARGETS = [
 ]
 
 # Targets de temperatura (columnas que deben excluirse de features para temperatura)
-TEMPERATURE_TARGETS = ['target_temperature']
+TEMPERATURE_TARGETS = ['target_next_temp']
 
 # Columnas a excluir siempre como features (IDs, targets, etc.)
 EXCLUDE_FROM_FEATURES = [
-    'heatid', 'target_temperature',
+    'heatid', 'target_next_temp',
     'target_valc', 'target_valmn', 'target_valsi', 'target_valp', 'target_vals',
     'target_valcu', 'target_valcr', 'target_valmo', 'target_valni' # <-- Lista Completa
 ]
