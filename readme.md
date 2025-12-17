@@ -5,14 +5,26 @@ Este proyecto implementa un sistema de analítica avanzada para predecir la temp
 ## Dataset Utilizado
 El proyecto utiliza el dataset público **"Industrial data from the arc furnace"** de Kaggle.
 * **Enlace:** [Kaggle - Industrial data from the arc furnace](https://www.kaggle.com/datasets/yuriykatser/industrial-data-from-the-arc-furnace)
-* **Nota:** El notebook `EAF_notebook.ipynb` incluye una celda de descarga automática que baja los archivos directamente vía API si no se encuentran en la carpeta `data/raw/`.
+* **Reproducibilidad:** El notebook `EAF_notebook.ipynb` incluye una celda de descarga automática que baja los archivos directamente vía API si no se encuentran en la carpeta `data/raw/`.
 
-##  Requisitos y Dependencias
+## 🛠️ Requisitos y Dependencias
 El proyecto requiere Python 3.9+ y las dependencias listadas en `requirements.txt`.
 
 ### Instalación
-1. Clona el repositorio o descomprime el archivo.
+1. Clona el repositorio.
 2. Crea un entorno virtual:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # En Windows: venv\Scripts\activate
+   - Windows: `python -m venv venv` y luego `venv\Scripts\activate`
+3. Instala las dependencias:
+   - `pip install -r requirements.txt`
+
+### Ejecución
+Para iniciar la interfaz visual (Dashboard):
+- `streamlit run dashboard/app.py`
+
+## 📂 Estructura del Repositorio
+* **EAF_notebook.ipynb**: Análisis, ingeniería de variables y entrenamiento de modelos.
+* **dashboard/**: Código de la interfaz de usuario y motores de datos (utils/).
+* **deploy/**: Definición del servicio de modelos con BentoML.
+* **models/**: Almacenamiento de modelos entrenados.
+* **data/**: Directorios para datos crudos (raw) y procesados (processed).
+
